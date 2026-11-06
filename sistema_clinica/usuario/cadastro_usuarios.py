@@ -1,15 +1,43 @@
+
 import hashlib
 import secrets
 from getpass import getpass
+
+from sistema_clinica.funcionalidades.regex import validar_nome, validar_email, validar_senha
 
 usuarios = []
 
 def cadastrar_usuario():
     print("\n=== CADASTRO DE USUÁRIO ===")
 
-    nome = input("Nome completo: ")
-    email = input("E-mail: ")
-    senha = input("Senha: ")
+    while True:
+        nome = input("Nome completo: ")
+
+        if validar_nome(nome):
+            break
+        else:
+            print("Nome inválido! Tente novamente.")
+
+    while True:
+        email = input("E-mail: ").strip().lower()
+
+        if validar_email(email):
+            break
+        else:
+            print("E-mail inválido! Tente novamente.")
+
+    for usuario in usuarios:
+        if usuario["email"] == email:
+            print("E-mail já cadastrado!")
+            return
+
+    while True:
+        senha = input("Senha: ")
+
+        if validar_senha(senha):
+            break
+        else:
+            print("Senha inválida! Mínimo de 8 caracteres.")
 
     print("\nPerfis disponíveis:")
     print("1 - Administrador")
@@ -30,12 +58,8 @@ def cadastrar_usuario():
         print("Perfil inválido!")
         return
 
-    for usuario in usuarios:
-        if usuario["email"] == email:
-            print("E-mail já cadastrado!")
-            return
-
     salt = secrets.token_bytes(16)
+
     senha_hash = hashlib.pbkdf2_hmac(
         "sha256", senha.encode(), salt, 600000
     ).hex()
