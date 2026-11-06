@@ -6,6 +6,10 @@ from sistema_clinica.pacientes import listagem_pacientes
 from sistema_clinica.usuario import listagem_usuarios
 from sistema_clinica.consultas import funcao_consulta
 from sistema_clinica.consultas import listagem_consultas
+from sistema_clinica.consultas import excluir_consultas
+from sistema_clinica.usuario import excluir_usuarios
+from sistema_clinica.medicos import excluir_medicos
+from sistema_clinica.pacientes import excluir_pacientes
 
 def menu():
     main_loop = True
@@ -29,7 +33,7 @@ def menu():
                         case 1:
                             paciente_loop = True
                             while paciente_loop:
-                                    valor_paciente = int(input('======= CADASTROS =======\n1 - Cadastrar pacientes\n2 - listar pacientes\n0 - Retornar\nEscolha uma opção: '))
+                                    valor_paciente = int(input('======= CADASTROS =======\n1 - Cadastrar pacientes\n2 - listar pacientes\n3 - excluir paciente\n0 - Retornar\nEscolha uma opção: '))
                                     match valor_paciente:
                                         case 0:
                                             print('RETORNANDO...')
@@ -39,12 +43,14 @@ def menu():
                                             cadastro_pacientes.cadastrar_paciente()
                                         case 2:
                                             listagem_pacientes.listar_pacientes()
+                                        case 3:
+                                              excluir_pacientes.excluir_paciente()
                                         case _:
                                             print('VALOR INVÁLIDO. TENTE NOVAMENTE.')
                         case 2:
                             medico_loop = True
                             while medico_loop:
-                                    valor_medico = int(input('======= CADASTROS =======\n1 - Cadastrar médico\n2 - listar médicos\n0 - Retornar\nEscolha uma opção: '))
+                                    valor_medico = int(input('======= CADASTROS =======\n1 - Cadastrar médico\n2 - listar médicos\n3 - Apagar médicos\n0 - Retornar\nEscolha uma opção: '))
                                     match valor_medico:
                                         case 0:
                                             print('RETORNANDO...')
@@ -54,12 +60,14 @@ def menu():
                                             cadastro_medicos.cadastrar_medico()
                                         case 2:
                                             listagem_medicos.listar_medicos()
+                                        case 3:
+                                              excluir_medicos.excluir_medico()
                                         case _:
                                             print('VALOR INVÁLIDO. TENTE NOVAMENTE.')
                         case 3:
                             usuario_loop = True
                             while usuario_loop:
-                                    valor_usuario = int(input('======= CADASTROS =======\n1 - Cadastrar usuários\n2 - listar usuários\n0 - Retornar\nEscolha uma opção: '))
+                                    valor_usuario = int(input('======= CADASTROS =======\n1 - Cadastrar usuários\n2 - listar usuários\n3 - Excluir usuário\n0 - Retornar\nEscolha uma opção: '))
                                     match valor_usuario:
                                         case 0:
                                             print('RETORNANDO...')
@@ -69,6 +77,8 @@ def menu():
                                             cadastro_usuarios.cadastrar_usuario()
                                         case 2:
                                             listagem_usuarios.listar_usuarios()
+                                        case 3:
+                                            excluir_usuarios.excluir_usuarios()
                                         case _:
                                             print('VALOR INVÁLIDO. TENTE NOVAMENTE.')
                         case _:
@@ -76,7 +86,7 @@ def menu():
             case 2:
                             consulta_loop = True
                             while consulta_loop:
-                                    valor_consulta = int(input('======= CONSULTAS =======\n1 - Cadastrar nova consulta\n2 - listar consultas\n0 - Retornar\nEscolha uma opção: '))
+                                    valor_consulta = int(input('======= CONSULTAS =======\n1 - Cadastrar nova consulta\n2 - listar consultas\n3 - Excluir consultas\n0 - Retornar\nEscolha uma opção: '))
                                     match valor_consulta:
                                         case 0:
                                             print('RETORNANDO...')
@@ -86,6 +96,8 @@ def menu():
                                             funcao_consulta.agendar_consulta()
                                         case 2:
                                             listagem_consultas.listar_consultas()
+                                        case 3:
+                                            excluir_consultas.excluir_consulta()
                                         case _:
                                             print('VALOR INVÁLIDO. TENTE NOVAMENTE.')                
             case 3:
