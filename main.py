@@ -4,11 +4,13 @@ from sistema_clinica.usuario import cadastro_usuarios
 from sistema_clinica.medicos import listagem_medicos
 from sistema_clinica.pacientes import listagem_pacientes
 from sistema_clinica.usuario import listagem_usuarios
+from sistema_clinica.consultas import funcao_consulta
+from sistema_clinica.consultas import listagem_consultas
 
 def menu():
     main_loop = True
     while main_loop:
-        valor_menu = int(input('======= SISTEMA DE GESTÃO MÉDICA ========\n1 - Cadastros\n2 - Agendar consulta\n3 - Consultar pacientes\n4 - Gerenciar prontuários\n5 - Financeiro\n0 - Sair\nEscolha uma opção: '))
+        valor_menu = int(input('======= SISTEMA DE GESTÃO MÉDICA ========\n1 - Cadastros\n2 - Consultas\n3 - Consultar pacientes\n4 - Gerenciar prontuários\n5 - Financeiro\n0 - Sair\nEscolha uma opção: '))
         
         match valor_menu:
             case 0:
@@ -72,8 +74,20 @@ def menu():
                         case _:
                             print('VALOR INVÁLIDO. TENTE NOVAMENTE.')
             case 2:
-                #Aqui fica a chamada da função de cada funcionalidade
-                break
+                            consulta_loop = True
+                            while consulta_loop:
+                                    valor_consulta = int(input('======= CONSULTAS =======\n1 - Cadastrar nova consulta\n2 - listar consultas\n0 - Retornar\nEscolha uma opção: '))
+                                    match valor_consulta:
+                                        case 0:
+                                            print('RETORNANDO...')
+                                            consulta_loop = False
+                                            break
+                                        case 1:
+                                            funcao_consulta.agendar_consulta()
+                                        case 2:
+                                            listagem_consultas.listar_consultas()
+                                        case _:
+                                            print('VALOR INVÁLIDO. TENTE NOVAMENTE.')                
             case 3:
                 #Aqui fica a chamada da função de cada funcionalidade
                 break
