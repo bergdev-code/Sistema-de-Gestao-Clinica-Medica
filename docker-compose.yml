@@ -1,0 +1,26 @@
+services:
+  db:
+    image: mariadb:12.3
+    container_name: clinica_db
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: berg1012
+      MARIADB_DATABASE: banco_clinica
+    ports:
+      - "3307:3306"
+    volumes:
+      - dados_mariadb:/var/lib/mysql
+
+  app:
+    build: .
+    container_name: clinica_app
+    restart: unless-stopped
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    stdin_open: true
+    tty: true
+
+volumes:
+  dados_mariadb:

@@ -19,7 +19,5 @@ def listar_pacientes():
         print(f"{'CPF:':<22} {paciente['cpf']}")
         print(f"{'DATA DE NASCIMENTO:':<22} {paciente['data_nascimento']}")
         print(f"{'TELEFONE:':<22} {paciente['telefone']}")
-        print(f"{'HISTÓRICO MÉDICO:':<22} {paciente['historico_medico']}")
-        print(f"{'ALERGIAS:':<22} {paciente['alergias']}")
 
         print("-" * 100)

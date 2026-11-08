@@ -9,19 +9,11 @@ def cadastrar_paciente():
     data_nascimento = input("Data de nascimento: ")
     telefone = input("Telefone: ")
 
-    print("\n--- HISTÓRICO MÉDICO ---")
-    historico_medico = input("Histórico médico: ")
-
-    print("\n--- ALERGIAS ---")
-    alergias = input("Possui alergias? Quais? ")
-
     paciente = {
         "nome": nome,
         "cpf": cpf,
         "data_nascimento": data_nascimento,
-        "telefone": telefone,
-        "historico_medico": historico_medico,
-        "alergias": alergias
+        "telefone": telefone
     }
 
     pacientes.append(paciente)
