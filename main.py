@@ -10,6 +10,9 @@ from sistema_clinica.consultas import excluir_consultas
 from sistema_clinica.usuario import excluir_usuarios
 from sistema_clinica.medicos import excluir_medicos
 from sistema_clinica.pacientes import excluir_pacientes
+from sistema_clinica.financeiro import cadastro_pagamentos
+from sistema_clinica.financeiro import listagem_pagamentos
+from sistema_clinica.financeiro import excluir_pagamentos
 
 def menu():
     main_loop = True
@@ -107,8 +110,24 @@ def menu():
                 #Aqui fica a chamada da função de cada funcionalidade
                 break
             case 5:
-                #Aqui fica a chamada da função de cada funcionalidade
-                break
+                financeiro_loop = True
+                while financeiro_loop:
+                    valor_financeiro = int(input('======= FINANCEIRO =======\n1 - Registrar pagamento\n2 - Listar pagamentos\n3 - Excluir pagamento\n4 - Resumo financeiro\n0 - Retornar\nEscolha uma opção: '))
+                    match valor_financeiro:
+                        case 0:
+                            print('RETORNANDO...')
+                            financeiro_loop = False
+                            break
+                        case 1:
+                            cadastro_pagamentos.registrar_pagamento()
+                        case 2:
+                            listagem_pagamentos.listar_pagamentos()
+                        case 3:
+                            excluir_pagamentos.excluir_pagamento()
+                        case 4:
+                            listagem_pagamentos.resumo_financeiro()
+                        case _:
+                            print('VALOR INVÁLIDO. TENTE NOVAMENTE.')
             case 6:
                 #Aqui fica a chamada da função de cada funcionalidade
                 break
