@@ -13,8 +13,19 @@ from sistema_clinica.pacientes import excluir_pacientes
 from sistema_clinica.financeiro import cadastro_pagamentos
 from sistema_clinica.financeiro import listagem_pagamentos
 from sistema_clinica.financeiro import excluir_pagamentos
+from sistema_clinica.funcionalidades.verificar_usuario import verificar_email
 
-def menu():
+def login():
+
+    perfil = verificar_email()
+
+    if perfil:
+        print("\nLogin realizado com sucesso!")
+        print(f"Perfil: {perfil}")
+
+        menu()
+
+def menu():        
     main_loop = True
     while main_loop:
         valor_menu = int(input('======= SISTEMA DE GESTÃO MÉDICA ========\n1 - Cadastros\n2 - Consultas\n3 - Consultar pacientes\n4 - Gerenciar prontuários\n5 - Financeiro\n0 - Sair\nEscolha uma opção: '))
@@ -133,5 +144,5 @@ def menu():
                 break
             case _:
                 print('VALOR INVÁLIDO.\nTENTE NOVAMENTE')
-    
-menu()
+
+login()

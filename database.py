@@ -6,7 +6,7 @@ def conectar():
         user="root",
         passwd="berg1012",
         db="banco_clinica",
-        port=3306
+        port=3307
     )
 
     return conexao
