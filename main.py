@@ -14,6 +14,7 @@ from sistema_clinica.financeiro import cadastro_pagamentos
 from sistema_clinica.financeiro import listagem_pagamentos
 from sistema_clinica.financeiro import excluir_pagamentos
 from sistema_clinica.funcionalidades.verificar_usuario import verificar_email
+from sistema_clinica.funcionalidades.verifica_conexao import verificar_conexao
 
 def login():
 
@@ -145,4 +146,5 @@ def menu():
             case _:
                 print('VALOR INVÁLIDO.\nTENTE NOVAMENTE')
 
+verificar_conexao()
 login()
