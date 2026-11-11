@@ -6,15 +6,12 @@ def listar_pacientes():
 
     print("\n========== PACIENTES CADASTRADOS ==========\n")
 
-    # Buscar pacientes diretamente no banco de dados
     pacientes = func_django.objects.all()
 
-    # Verificar se existem registros
     if not pacientes.exists():
         print("Nenhum paciente cadastrado!")
         return
 
-    # Organizar os dados em uma tabela
     tabela = []
 
     for paciente in pacientes:
@@ -25,7 +22,6 @@ def listar_pacientes():
             paciente.telefone
         ])
 
-    # Exibir os resultados
     cabecalho = ["NOME", "CPF", "DATA DE NASCIMENTO", "TELEFONE"]
 
     print(tabulate(

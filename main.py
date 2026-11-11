@@ -2,17 +2,14 @@ import os
 import sys
 from pathlib import Path
 
-# Caminho raiz do projeto
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
-# Configurações do Django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 import django
 django.setup()
 
-# Importar funcionalidades somente após inicializar o Django
 from func_django.models import func_django
 from sistema_clinica.pacientes import cadastro_pacientes
 from sistema_clinica.pacientes import cadastro_pacientes

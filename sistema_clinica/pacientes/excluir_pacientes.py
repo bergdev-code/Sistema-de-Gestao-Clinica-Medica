@@ -1,30 +1,29 @@
-from sistema_clinica.pacientes.cadastro_pacientes import func_django
+from func_django.models import func_django
+
 
 def excluir_paciente():
-    print("\n===== EXCLUIR PACIENTE =====")
 
-    if not func_django:
-        print("Nenhum paciente cadastrado!")
+    print("\n========== EXCLUIR PACIENTE ==========")
+
+    cpf = input("Informe o CPF do paciente: ").strip()
+
+    paciente = func_django.objects.filter(cpf=cpf).first()
+
+    if paciente is None:
+        print("\nPaciente não encontrado!")
         return
 
-    for i, paciente in enumerate(func_django, start=1):
-        print(f"\n--- PACIENTE {i} ---")
-        print(f"Nome: {paciente['nome']}")
-        print(f"CPF: {paciente['cpf']}")
-        print(f"Data de nascimento: {paciente['data_nascimento']}")
-        print(f"Telefone: {paciente['telefone']}")
+    print("\nPaciente encontrado:")
+    print(f"Nome: {paciente.nome}")
+    print(f"CPF: {paciente.cpf}")
 
-    try:
-        opcao = int(input("\nDigite o número do paciente que deseja excluir: "))
+    confirmacao = input("\nDeseja realmente excluir? (S/N): ").strip().upper()
 
-        if opcao < 1 or opcao > len(func_django):
-            print("\nPaciente não encontrado!")
-            return
+    if confirmacao == "S":
 
-        paciente_removido = func_django.pop(opcao - 1)
+        paciente.delete()
 
         print("\nPaciente excluído com sucesso!")
-        print(f"Paciente removido: {paciente_removido['nome']}")
 
-    except ValueError:
-        print("\nDigite um número válido!")
+    else:
+        print("\nExclusão cancelada!")
