@@ -1,13 +1,13 @@
-from sistema_clinica.pacientes.cadastro_pacientes import pacientes
+from sistema_clinica.pacientes.cadastro_pacientes import func_django
 
 def excluir_paciente():
     print("\n===== EXCLUIR PACIENTE =====")
 
-    if not pacientes:
+    if not func_django:
         print("Nenhum paciente cadastrado!")
         return
 
-    for i, paciente in enumerate(pacientes, start=1):
+    for i, paciente in enumerate(func_django, start=1):
         print(f"\n--- PACIENTE {i} ---")
         print(f"Nome: {paciente['nome']}")
         print(f"CPF: {paciente['cpf']}")
@@ -17,11 +17,11 @@ def excluir_paciente():
     try:
         opcao = int(input("\nDigite o número do paciente que deseja excluir: "))
 
-        if opcao < 1 or opcao > len(pacientes):
+        if opcao < 1 or opcao > len(func_django):
             print("\nPaciente não encontrado!")
             return
 
-        paciente_removido = pacientes.pop(opcao - 1)
+        paciente_removido = func_django.pop(opcao - 1)
 
         print("\nPaciente excluído com sucesso!")
         print(f"Paciente removido: {paciente_removido['nome']}")

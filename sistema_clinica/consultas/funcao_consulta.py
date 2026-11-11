@@ -1,4 +1,4 @@
-from sistema_clinica.pacientes.cadastro_pacientes import pacientes
+from sistema_clinica.pacientes.cadastro_pacientes import func_django
 from sistema_clinica.medicos.cadastro_medicos import medicos
 
 consultas = []
@@ -11,7 +11,7 @@ def agendar_consulta():
     cpf = input("CPF do paciente: ")
 
     paciente_selecionado = next(
-        (p for p in pacientes if p["cpf"] == cpf),
+        (p for p in func_django if p["cpf"] == cpf),
         None
     )
 

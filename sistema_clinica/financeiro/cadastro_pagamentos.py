@@ -1,4 +1,4 @@
-from sistema_clinica.pacientes.cadastro_pacientes import pacientes
+from sistema_clinica.pacientes.cadastro_pacientes import func_django
 
 pagamentos = []
 
@@ -18,14 +18,14 @@ STATUS = {
 def registrar_pagamento():
     print("\n===== REGISTRO DE PAGAMENTO =====")
 
-    if not pacientes:
+    if not func_django:
         print("Nenhum paciente cadastrado!")
         return
 
     cpf = input("CPF do paciente: ")
 
     paciente_selecionado = next(
-        (p for p in pacientes if p["cpf"] == cpf),
+        (p for p in func_django if p["cpf"] == cpf),
         None
     )
 
