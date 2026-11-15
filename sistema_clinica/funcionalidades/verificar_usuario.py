@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 
-from sistema_clinica.usuario.cadastro_usuarios import usuarios
+from sistema_clinica.usuario.cadastro_usuarios import Usuario
 
 U_user = "root"
 U_senha = "root@123"
@@ -23,7 +23,7 @@ def verificar_email():
 
         autenticado = False
 
-        for v_usuario in usuarios:
+        for v_usuario in Usuario:
 
             if v_usuario["email"] == v_email:
 

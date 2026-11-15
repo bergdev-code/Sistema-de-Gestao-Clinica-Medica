@@ -10,7 +10,6 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
 django.setup()
 
-from func_django.models import func_django
 from sistema_clinica.pacientes import cadastro_pacientes
 from sistema_clinica.pacientes import cadastro_pacientes
 from sistema_clinica.medicos import cadastro_medicos
