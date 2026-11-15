@@ -24,6 +24,11 @@ from sistema_clinica.consultas import excluir_consultas
 from sistema_clinica.usuario import excluir_usuarios
 from sistema_clinica.medicos import excluir_medicos
 from sistema_clinica.pacientes import excluir_pacientes
+from sistema_clinica.pacientes import consultar_pacientes
+from sistema_clinica.prontuarios import cadastro_prontuarios
+from sistema_clinica.prontuarios import listagem_prontuarios
+from sistema_clinica.prontuarios import consultar_prontuarios
+from sistema_clinica.prontuarios import excluir_prontuarios
 from sistema_clinica.financeiro import cadastro_pagamentos
 from sistema_clinica.financeiro import listagem_pagamentos
 from sistema_clinica.financeiro import excluir_pagamentos
@@ -130,11 +135,39 @@ def menu():
                                         case _:
                                             print('VALOR INVÁLIDO. TENTE NOVAMENTE.')                
             case 3:
-                #Aqui fica a chamada da função de cada funcionalidade
-                break
+                consulta_paciente_loop = True
+                while consulta_paciente_loop:
+                    valor_consulta_paciente = int(input('======= CONSULTAR PACIENTES =======\n1 - Consultar por CPF\n2 - Consultar por nome\n0 - Retornar\nEscolha uma opção: '))
+                    match valor_consulta_paciente:
+                        case 0:
+                            print('RETORNANDO...')
+                            consulta_paciente_loop = False
+                            break
+                        case 1:
+                            consultar_pacientes.consultar_por_cpf()
+                        case 2:
+                            consultar_pacientes.consultar_por_nome()
+                        case _:
+                            print('VALOR INVÁLIDO. TENTE NOVAMENTE.')
             case 4:
-                #Aqui fica a chamada da função de cada funcionalidade
-                break
+                prontuario_loop = True
+                while prontuario_loop:
+                    valor_prontuario = int(input('======= PRONTUÁRIOS =======\n1 - Registrar prontuário\n2 - Listar prontuários\n3 - Consultar prontuário\n4 - Excluir prontuário\n0 - Retornar\nEscolha uma opção: '))
+                    match valor_prontuario:
+                        case 0:
+                            print('RETORNANDO...')
+                            prontuario_loop = False
+                            break
+                        case 1:
+                            cadastro_prontuarios.registrar_prontuario()
+                        case 2:
+                            listagem_prontuarios.listar_prontuarios()
+                        case 3:
+                            consultar_prontuarios.consultar_prontuario()
+                        case 4:
+                            excluir_prontuarios.excluir_prontuario()
+                        case _:
+                            print('VALOR INVÁLIDO. TENTE NOVAMENTE.')
             case 5:
                 financeiro_loop = True
                 while financeiro_loop:
