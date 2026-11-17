@@ -1,7 +1,9 @@
+
 import hashlib
 import hmac
 
 from sistema_clinica.usuario.cadastro_usuarios import Usuario
+
 
 U_user = "root"
 U_senha = "root@123"
@@ -18,40 +20,48 @@ def verificar_email():
         v_email = input("USER: ").strip().lower()
         v_senha = input("SENHA: ")
 
+        # LOGIN DO ADMINISTRADOR GERAL
         if v_email == U_user and v_senha == U_senha:
-            return "ADMIN GERAL"
+            return ("root", "ADMIN GERAL")
 
-        autenticado = False
+        # BUSCAR USUÁRIO NO BANCO DE DADOS
+        usuario = Usuario.objects.filter(
+            email__iexact=v_email
+        ).select_related("id_perfil").first()
 
-        for v_usuario in Usuario:
+        if usuario is not None:
 
-            if v_usuario["email"] == v_email:
+            # RECUPERAR O SALT
+            salt = bytes.fromhex(usuario.salt)
 
-                salt = bytes.fromhex(v_usuario["salt"])
+            # GERAR HASH DA SENHA INFORMADA
+            senha_hash = hashlib.pbkdf2_hmac(
+                "sha256",
+                v_senha.encode(),
+                salt,
+                600000
+            ).hex()
 
-                senha_hash = hashlib.pbkdf2_hmac(
-                    "sha256",
-                    v_senha.encode(),
-                    salt,
-                    600000
-                ).hex()
+            # COMPARAR OS HASHES
+            if hmac.compare_digest(
+                senha_hash,
+                usuario.senha_hash
+            ):
 
-                if hmac.compare_digest(
-                    senha_hash,
-                    v_usuario["senha"]
-                ):
-                    return v_usuario["perfil"]
+                return (
+                    usuario.username,
+                    usuario.id_perfil.nome_perfil
+                )
 
-                autenticado = True
-                break
-
+        # LOGIN INVÁLIDO
         tentativas -= 1
 
         print("\nE-mail ou senha incorretos!")
 
         if tentativas > 0:
             print(f"Tentativas restantes: {tentativas}")
+
         else:
-            print("Acesso bloqueado! Limite de tentativas excedido.")
+            print("\nAcesso bloqueado! Limite de tentativas excedido.")
 
     return None

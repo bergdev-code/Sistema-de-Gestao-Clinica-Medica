@@ -1,38 +1,55 @@
-from sistema_clinica.prontuarios.cadastro_prontuarios import prontuarios
+
+from func_django.models import Prontuario
 
 
 def excluir_prontuario():
+
     print("\n===== EXCLUIR PRONTUÁRIO =====")
 
-    if not prontuarios:
+    prontuarios = Prontuario.objects.select_related(
+        "paciente"
+    ).all().order_by("id_prontuario")
+
+    if not prontuarios.exists():
         print("Nenhum prontuário registrado!")
         return
 
-    for i, prontuario in enumerate(prontuarios, start=1):
-        print(f"\n--- PRONTUÁRIO {i} ---")
-        print(f"Paciente: {prontuario['paciente']}")
-        print(f"CPF: {prontuario['cpf']}")
-        print(f"Médico: {prontuario['medico']}")
-        print(f"Data: {prontuario['data']}")
-        print(f"Diagnóstico: {prontuario['diagnostico']}")
+    for prontuario in prontuarios:
+
+        print(f"\n--- PRONTUÁRIO {prontuario.id_prontuario} ---")
+        print(f"Paciente: {prontuario.paciente.nome}")
+        print(f"CPF: {prontuario.paciente_id}")
+        print(f"Médico (CRM): {prontuario.medico_id}")
+        print(f"Diagnóstico: {prontuario.diagnostico}")
 
     try:
-        opcao = int(input("\nDigite o número do prontuário que deseja excluir: "))
-
-        if opcao < 1 or opcao > len(prontuarios):
-            print("\nProntuário não encontrado!")
-            return
-
-        confirmacao = input("\nDeseja realmente excluir? (S/N): ").strip().upper()
-
-        if confirmacao != "S":
-            print("\nExclusão cancelada!")
-            return
-
-        prontuario_removido = prontuarios.pop(opcao - 1)
-
-        print("\nProntuário excluído com sucesso!")
-        print(f"Paciente: {prontuario_removido['paciente']}")
+        opcao = int(
+            input("\nDigite o ID do prontuário que deseja excluir: ")
+        )
 
     except ValueError:
         print("\nDigite um número válido!")
+        return
+
+    prontuario = Prontuario.objects.filter(
+        id_prontuario=opcao
+    ).first()
+
+    if prontuario is None:
+        print("\nProntuário não encontrado!")
+        return
+
+    confirmacao = input(
+        "\nDeseja realmente excluir? (S/N): "
+    ).strip().upper()
+
+    if confirmacao != "S":
+        print("\nExclusão cancelada!")
+        return
+
+    paciente_nome = prontuario.paciente.nome
+
+    prontuario.delete()
+
+    print("\nProntuário excluído com sucesso!")
+    print(f"Paciente: {paciente_nome}")

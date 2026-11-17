@@ -76,11 +76,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'nomedobanco',
-        'USER': 'nomedousuario',
-        'PASSWORD': 'senhadobanco',
-        'HOST': 'ipdobanco',
-        'PORT': 'portadobanco'
+        'NAME': 'banco_clinica',
+        'USER': 'root',
+        'PASSWORD': 'berg1012',
+        'HOST': '127.0.0.1',
+        'PORT': '3307'
     }
 }
 

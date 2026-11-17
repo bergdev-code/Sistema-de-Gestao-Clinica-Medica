@@ -1,25 +1,21 @@
-from sistema_clinica.prontuarios.cadastro_prontuarios import prontuarios
+
+from func_django.models import Prontuario
 
 
 def _exibir_prontuario(numero, prontuario):
+
     print(f"\n--- PRONTUÁRIO {numero} ---")
-    print(f"Paciente: {prontuario['paciente']}")
-    print(f"CPF: {prontuario['cpf']}")
-    print(f"Médico: {prontuario['medico']}")
-    print(f"Especialidade: {prontuario['especialidade']}")
-    print(f"Data: {prontuario['data']}")
-    print(f"Queixa: {prontuario['queixa']}")
-    print(f"Diagnóstico: {prontuario['diagnostico']}")
-    print(f"Prescrição: {prontuario['prescricao']}")
-    print(f"Observações: {prontuario['observacoes']}")
+    print(f"Paciente: {prontuario.paciente.nome}")
+    print(f"CPF: {prontuario.paciente_id}")
+    print(f"Médico (CRM): {prontuario.medico_id}")
+    print(f"Anamnese / Queixa: {prontuario.anamnese}")
+    print(f"Diagnóstico: {prontuario.diagnostico}")
+    print(f"Prescrição: {prontuario.prescricao}")
 
 
 def consultar_prontuario():
-    print("\n===== CONSULTAR PRONTUÁRIO =====")
 
-    if not prontuarios:
-        print("Nenhum prontuário registrado!")
-        return
+    print("\n===== CONSULTAR PRONTUÁRIO =====")
 
     cpf = input("CPF do paciente: ").strip()
 
@@ -27,15 +23,15 @@ def consultar_prontuario():
         print("\nCPF inválido!")
         return
 
-    encontrados = [
-        prontuario for prontuario in prontuarios if prontuario["cpf"] == cpf
-    ]
+    encontrados = Prontuario.objects.filter(
+        paciente_id=cpf
+    ).select_related("paciente").order_by("id_prontuario")
 
-    if not encontrados:
+    if not encontrados.exists():
         print("\nNenhum prontuário encontrado para este paciente!")
         return
 
-    print(f"\n{len(encontrados)} prontuário(s) encontrado(s).")
+    print(f"\n{encontrados.count()} prontuário(s) encontrado(s).")
 
     for i, prontuario in enumerate(encontrados, start=1):
         _exibir_prontuario(i, prontuario)

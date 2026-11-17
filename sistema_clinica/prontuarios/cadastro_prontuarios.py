@@ -1,75 +1,60 @@
-from func_django.models import func_django
-from sistema_clinica.medicos.cadastro_medicos import medicos
 
-prontuarios = []
+from django.core.exceptions import ImproperlyConfigured
+from func_django.models import func_django, Prontuario, Medico
 
 
-def registrar_prontuario():
-    print("\n===== REGISTRO DE PRONTUÁRIO =====")
-
-    if not func_django.objects.exists():
-        print("Nenhum paciente cadastrado!")
-        return
+def cadastrar_prontuario():
+    print("\n===== CADASTRO DE PRONTUÁRIO =====")
 
     cpf = input("CPF do paciente: ").strip()
 
-    paciente = func_django.objects.filter(cpf=cpf).first()
-
-    if paciente is None:
-        print("Paciente não encontrado!")
+    try:
+        paciente = func_django.objects.get(cpf=cpf)
+    except func_django.DoesNotExist:
+        print("\nPaciente não encontrado!")
         return
 
-    if not medicos:
-        print("Nenhum médico cadastrado!")
+    # Busca os médicos diretamente no banco de dados
+    medicos = Medico.objects.filter(ativo=True).order_by("nome")
+
+    if not medicos.exists():
+        print("\nNenhum médico ativo cadastrado!")
         return
 
     print("\n===== MÉDICOS DISPONÍVEIS =====")
 
-    for medico in medicos:
-        print(
-            f"ID: {medico['id']} | "
-            f"Nome: {medico['nome']} | "
-            f"Especialidade: {medico['especialidade']}"
-        )
+    lista_medicos = list(medicos)
+
+    for i, medico in enumerate(lista_medicos, start=1):
+        print(f"{i} - {medico.nome} | CRM: {medico.crm}")
 
     try:
-        id_medico = int(input("\nID do médico: "))
+        opcao = int(input("\nSelecione o médico: "))
+
+        if opcao < 1 or opcao > len(lista_medicos):
+            print("\nOpção inválida!")
+            return
+
+        medico_selecionado = lista_medicos[opcao - 1]
+
     except ValueError:
         print("\nDigite um número válido!")
         return
 
-    medico_selecionado = next(
-        (m for m in medicos if m["id"] == id_medico),
-        None
-    )
-
-    if medico_selecionado is None:
-        print("Médico não encontrado!")
-        return
-
-    data = input("Data do atendimento: ").strip()
-    queixa = input("Queixa principal: ").strip()
+    anamnese = input("\nAnamnese: ").strip()
     diagnostico = input("Diagnóstico: ").strip()
     prescricao = input("Prescrição: ").strip()
-    observacoes = input("Observações: ").strip()
 
-    if not data or not queixa or not diagnostico:
-        print("\nData, queixa e diagnóstico são obrigatórios!")
-        return
+    try:
+        Prontuario.objects.create(
+            paciente=paciente,
+            medico=medico_selecionado,
+            anamnese=anamnese,
+            diagnostico=diagnostico,
+            prescricao=prescricao
+        )
 
-    prontuario = {
-        "id": len(prontuarios) + 1,
-        "paciente": paciente.nome,
-        "cpf": paciente.cpf,
-        "medico": medico_selecionado["nome"],
-        "especialidade": medico_selecionado["especialidade"],
-        "data": data,
-        "queixa": queixa,
-        "diagnostico": diagnostico,
-        "prescricao": prescricao,
-        "observacoes": observacoes,
-    }
+        print("\nProntuário cadastrado com sucesso!")
 
-    prontuarios.append(prontuario)
-
-    print("\nProntuário registrado com sucesso!")
+    except Exception as erro:
+        print(f"\nErro ao cadastrar prontuário: {erro}")

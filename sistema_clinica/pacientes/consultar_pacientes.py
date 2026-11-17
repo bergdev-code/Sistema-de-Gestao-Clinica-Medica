@@ -1,21 +1,24 @@
+
 from tabulate import tabulate
 
 from func_django.models import func_django
-from sistema_clinica.prontuarios.cadastro_prontuarios import prontuarios
+from func_django.models import Prontuario
 
 
 def _formatar_data(data):
     if data is None:
         return ""
+
     return data.strftime("%d/%m/%Y")
 
 
 def _exibir_paciente(paciente):
-    quantidade = sum(
-        1 for prontuario in prontuarios if prontuario["cpf"] == paciente.cpf
-    )
 
-    print("\nPaciente encontrado:")
+    quantidade = Prontuario.objects.filter(
+        paciente_id=paciente.cpf
+    ).count()
+
+    print("\n========== PACIENTE ENCONTRADO ==========")
     print(f"Nome: {paciente.nome}")
     print(f"CPF: {paciente.cpf}")
     print(f"Data de nascimento: {_formatar_data(paciente.data_nascimento)}")
@@ -23,53 +26,63 @@ def _exibir_paciente(paciente):
     print(f"Prontuários registrados: {quantidade}")
 
 
-def consultar_por_cpf():
+def consultar_paciente():
+
     print("\n========== CONSULTAR PACIENTE ==========")
+    print("1 - Consultar por CPF")
+    print("2 - Consultar por nome")
 
-    cpf = input("Informe o CPF do paciente: ").strip()
+    opcao = input("\nEscolha uma opção: ").strip()
 
-    if not cpf:
-        print("\nCPF inválido!")
+    if opcao == "1":
+
+        valor = input("\nInforme o CPF do paciente: ").strip()
+
+        if not valor:
+            print("\nCPF inválido!")
+            return
+
+        pacientes = func_django.objects.filter(cpf=valor)
+
+    elif opcao == "2":
+
+        valor = input("\nInforme o nome do paciente: ").strip()
+
+        if not valor:
+            print("\nNome inválido!")
+            return
+
+        pacientes = func_django.objects.filter(nome__icontains=valor)
+
+    else:
+        print("\nOpção inválida!")
         return
-
-    paciente = func_django.objects.filter(cpf=cpf).first()
-
-    if paciente is None:
-        print("\nPaciente não encontrado!")
-        return
-
-    _exibir_paciente(paciente)
-
-
-def consultar_por_nome():
-    print("\n========== CONSULTAR PACIENTE ==========")
-
-    nome = input("Informe o nome do paciente: ").strip()
-
-    if not nome:
-        print("\nNome inválido!")
-        return
-
-    pacientes = func_django.objects.filter(nome__icontains=nome)
 
     if not pacientes.exists():
         print("\nNenhum paciente encontrado!")
         return
 
+    if pacientes.count() == 1:
+        _exibir_paciente(pacientes.first())
+        return
+
     tabela = []
 
     for paciente in pacientes:
+
         tabela.append([
             paciente.nome,
             paciente.cpf,
             _formatar_data(paciente.data_nascimento),
-            paciente.telefone,
+            paciente.telefone
         ])
 
-    cabecalho = ["NOME", "CPF", "DATA DE NASCIMENTO", "TELEFONE"]
+    cabecalho = [
+        "NOME",
+        "CPF",
+        "DATA DE NASCIMENTO",
+        "TELEFONE"
+    ]
 
-    print()
+    print("\n========== PACIENTES ENCONTRADOS ==========")
     print(tabulate(tabela, headers=cabecalho, tablefmt="grid"))
-
-    if pacientes.count() == 1:
-        _exibir_paciente(pacientes.first())
