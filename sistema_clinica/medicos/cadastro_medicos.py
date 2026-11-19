@@ -1,4 +1,3 @@
-
 from django.db import transaction
 from func_django.models import (
     Medico,
@@ -15,9 +14,8 @@ def cadastrar_medico():
     crm = input("CRM: ").strip()
     nome = input("Nome: ").strip()
     telefone = input("Telefone: ").strip()
-    usuario = input("Usuário vinculado: ").strip()
 
-    if not crm or not nome or not telefone or not usuario:
+    if not crm or not nome or not telefone:
         print("\nTodos os campos são obrigatórios!")
         return
 
@@ -44,6 +42,7 @@ def cadastrar_medico():
         return
 
     try:
+
         with transaction.atomic():
 
             # Cadastrar médico
@@ -51,7 +50,6 @@ def cadastrar_medico():
                 crm=crm,
                 nome=nome,
                 telefone=telefone,
-                usuario=usuario,
                 ativo=True
             )
 

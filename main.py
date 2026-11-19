@@ -38,6 +38,7 @@ from sistema_clinica.financeiro import excluir_pagamentos
 
 from sistema_clinica.funcionalidades.verificar_usuario import verificar_email
 from sistema_clinica.funcionalidades.verifica_conexao import verificar_conexao
+from sistema_clinica.funcionalidades.sessao import iniciar_sessao
 
 from sistema_clinica.atendimento.meus_agendamentos import meus_agendamentos
 from sistema_clinica.atendimento.iniciar_atendimento import iniciar_atendimento
@@ -52,9 +53,10 @@ def login():
 
     username_logado, perfil = resultado
 
+    iniciar_sessao(username_logado, perfil)
+
     print("\nLogin realizado com sucesso!")
     print(f"Perfil: {perfil}")
-
     menu(username_logado, perfil)
 
 def menu(username_logado, perfil):
@@ -315,7 +317,7 @@ def menu_atendimento_medico(username_logado):
                 meus_agendamentos(username_logado)
 
             case "2":
-                iniciar_atendimento(username_logado)
+                iniciar_atendimento()
 
             case _:
                 print("\nVALOR INVÁLIDO. TENTE NOVAMENTE.")
@@ -347,7 +349,7 @@ def menu_prontuarios():
                 prontuario_loop = False
 
             case "1":
-                cadastro_prontuarios.registrar_prontuario()
+                cadastro_prontuarios.cadastrar_prontuario()
 
             case "2":
                 listagem_prontuarios.listar_prontuarios()
@@ -409,5 +411,7 @@ def menu_financeiro():
 
 if __name__ == "__main__":
 
-    verificar_conexao()
-    login()
+    if verificar_conexao():
+        login()
+    else:
+        print("\nSistema encerrado devido à falha na conexão.")

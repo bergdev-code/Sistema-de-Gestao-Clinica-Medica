@@ -17,7 +17,7 @@ def verificar_email():
 
         print("\n========== LOGIN ==========")
 
-        v_email = input("USER: ").strip().lower()
+        v_email = input("EMAIL: ").strip().lower()
         v_senha = input("SENHA: ")
 
         # LOGIN DO ADMINISTRADOR GERAL

@@ -1,11 +1,30 @@
 from django.db import models
 
+class Medico(models.Model):
+
+    crm = models.CharField(max_length=6, primary_key=True)
+    nome = models.CharField(max_length=150)
+    telefone = models.CharField(max_length=11)
+    ativo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'medicos'
+        managed = False
+
 class func_django(models.Model):
 
     cpf = models.CharField(max_length=11, primary_key=True)
     nome = models.CharField(max_length=150, null=True, blank=True)
     telefone = models.CharField(max_length=11, null=True, blank=True)
     data_nascimento = models.DateField(null=True, blank=True)
+
+    medico = models.ForeignKey(
+    Medico,
+    on_delete=models.PROTECT,
+    related_name="pacientes",
+    null=True,
+    blank=True
+)
 
     class Meta:
         db_table = 'pacientes'
@@ -44,23 +63,21 @@ class Usuario(models.Model):
         db_column='id_perfil'
     )
 
+    medico = models.ForeignKey(
+    Medico,
+    on_delete=models.PROTECT,
+    db_column='crm',
+    null=True,
+    blank=True
+)
+    
     class Meta:
         db_table = 'usuarios'
         managed = True
 
 
 
-class Medico(models.Model):
 
-    crm = models.CharField(max_length=6, primary_key=True)
-    nome = models.CharField(max_length=150)
-    telefone = models.CharField(max_length=11)
-    ativo = models.BooleanField(default=True)
-    usuario = models.CharField(max_length=100)
-
-    class Meta:
-        db_table = 'medicos'
-        managed = False
 
 class Prontuario(models.Model):
     id_prontuario = models.AutoField(primary_key=True)

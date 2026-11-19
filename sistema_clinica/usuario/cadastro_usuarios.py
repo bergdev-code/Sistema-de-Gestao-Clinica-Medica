@@ -9,7 +9,7 @@ from sistema_clinica.funcionalidades.regex import (
     validar_senha
 )
 
-from func_django.models import Usuario, Perfil
+from func_django.models import Usuario, Perfil, Medico
 
 
 def cadastrar_usuario():
@@ -66,8 +66,11 @@ def cadastrar_usuario():
         print("Nenhum perfil cadastrado!")
         return
 
-    for perfil in perfis:
-        print(f"{perfil.id_perfil} - {perfil.nome_perfil}")
+    for perfil_disponivel in perfis:
+        print(
+            f"{perfil_disponivel.id_perfil} - "
+            f"{perfil_disponivel.nome_perfil}"
+        )
 
     try:
         opcao = int(input("\nSelecione o perfil: "))
@@ -80,6 +83,49 @@ def cadastrar_usuario():
     if not perfil:
         print("Perfil não encontrado!")
         return
+
+    # VINCULAR MÉDICO
+    medico = None
+
+    if perfil.nome_perfil == "Médico":
+
+        medicos = Medico.objects.filter(ativo=True).order_by("nome")
+
+        if not medicos.exists():
+            print("\nNenhum médico ativo encontrado!")
+            return
+
+        medicos_disponiveis = list(
+            medicos.exclude(
+                crm__in=Usuario.objects.filter(
+                    medico__isnull=False
+                ).values_list("medico__crm", flat=True)
+            )
+        )
+
+        if not medicos_disponiveis:
+            print("\nTodos os médicos ativos já possuem usuário vinculado!")
+            return
+
+        print("\n========== MÉDICOS DISPONÍVEIS ==========")
+
+        for i, profissional in enumerate(medicos_disponiveis, start=1):
+            print(
+                f"{i} - {profissional.nome} "
+                f"| CRM: {profissional.crm}"
+            )
+
+        try:
+            opcao_medico = int(input("\nSelecione o médico: "))
+        except ValueError:
+            print("Opção inválida!")
+            return
+
+        if opcao_medico < 1 or opcao_medico > len(medicos_disponiveis):
+            print("Opção inválida!")
+            return
+
+        medico = medicos_disponiveis[opcao_medico - 1]
 
     # Gerar salt
     salt = secrets.token_bytes(16)
@@ -94,12 +140,14 @@ def cadastrar_usuario():
 
     # Salvar usuário
     try:
+
         Usuario.objects.create(
             username=username,
             email=email,
             senha_hash=senha_hash,
             salt=salt.hex(),
-            id_perfil=perfil
+            id_perfil=perfil,
+            medico=medico
         )
 
         print("\nUsuário cadastrado com sucesso!")
