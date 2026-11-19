@@ -1,6 +1,13 @@
-from sistema_clinica.pacientes.cadastro_pacientes import func_django
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 
-pagamentos = []
+from func_django.models import (
+    func_django,
+    Agendamento,
+    Pagamento,
+    StatusPagamento,
+)
+
 
 FORMAS = {
     "1": "Dinheiro",
@@ -10,80 +17,133 @@ FORMAS = {
 }
 
 STATUS = {
-    "1": "Pago",
+    "1": "Concluído",
     "2": "Pendente",
+    "3": "Cancelado",
 }
 
 
 def registrar_pagamento():
     print("\n===== REGISTRO DE PAGAMENTO =====")
 
-    if not func_django:
-        print("Nenhum paciente cadastrado!")
+    cpf = input("CPF do paciente: ").strip()
+
+    try:
+        paciente = func_django.objects.get(cpf=cpf)
+
+    except func_django.DoesNotExist:
+        print("\nPaciente não encontrado!")
         return
 
-    cpf = input("CPF do paciente: ")
-
-    paciente_selecionado = next(
-        (p for p in func_django if p["cpf"] == cpf),
-        None
+    agendamentos = Agendamento.objects.filter(
+        paciente=paciente
     )
 
-    if paciente_selecionado is None:
-        print("Paciente não encontrado!")
+    if not agendamentos.exists():
+        print("\nNenhum agendamento encontrado!")
         return
 
-    descricao = input("Descrição (consulta, exame, etc.): ").strip()
+    print("\n===== AGENDAMENTOS DO PACIENTE =====")
+
+    for agendamento in agendamentos:
+        print(
+            f"ID: {agendamento.id_agendamento} | "
+            f"Data: {agendamento.data_hora}"
+        )
+
+    try:
+        id_agendamento = int(
+            input("\nID do agendamento: ")
+        )
+
+    except ValueError:
+        print("\nID inválido!")
+        return
+
+    agendamento_selecionado = agendamentos.filter(
+        id_agendamento=id_agendamento
+    ).first()
+
+    if agendamento_selecionado is None:
+        print("\nAgendamento não encontrado!")
+        return
+
+    descricao = input(
+        "Descrição (consulta, exame, etc.): "
+    ).strip()
 
     if not descricao:
-        print("Descrição inválida!")
+        print("\nDescrição inválida!")
         return
 
     try:
-        valor = float(input("Valor: ").replace(",", "."))
-    except ValueError:
+        valor = Decimal(
+            input("Valor: ").replace(",", ".")
+        )
+
+    except InvalidOperation:
         print("\nDigite um valor válido!")
         return
 
-    if valor <= 0:
+    if not valor.is_finite() or valor <= 0:
         print("\nO valor deve ser maior que zero!")
         return
 
-    print("\nFormas de pagamento:")
-    print("1 - Dinheiro")
-    print("2 - Pix")
-    print("3 - Cartão")
-    print("4 - Convênio")
+    if valor.as_tuple().exponent < -2:
+        print("\nO valor deve possuir no máximo duas casas decimais!")
+        return
 
-    forma = input("Selecione a forma: ")
+    print("\n===== FORMAS DE PAGAMENTO =====")
+
+    for codigo, nome in FORMAS.items():
+        print(f"{codigo} - {nome}")
+
+    forma = input("Selecione a forma: ").strip()
 
     if forma not in FORMAS:
-        print("Forma de pagamento inválida!")
+        print("\nForma de pagamento inválida!")
         return
 
-    print("\nStatus:")
-    print("1 - Pago")
-    print("2 - Pendente")
+    print("\n===== STATUS DO PAGAMENTO =====")
 
-    status = input("Selecione o status: ")
+    for codigo, nome in STATUS.items():
+        print(f"{codigo} - {nome}")
+
+    status = input("Selecione o status: ").strip()
 
     if status not in STATUS:
-        print("Status inválido!")
+        print("\nStatus inválido!")
         return
 
-    data = input("Data do pagamento: ")
+    data = input(
+        "Data do pagamento (DD/MM/AAAA): "
+    ).strip()
 
-    pagamento = {
-        "id": len(pagamentos) + 1,
-        "paciente": paciente_selecionado["nome"],
-        "cpf": paciente_selecionado["cpf"],
-        "descricao": descricao,
-        "valor": valor,
-        "forma": FORMAS[forma],
-        "status": STATUS[status],
-        "data": data,
-    }
+    try:
+        data_convertida = datetime.strptime(
+            data, "%d/%m/%Y"
+        ).date()
 
-    pagamentos.append(pagamento)
+    except ValueError:
+        print("\nData inválida!")
+        return
+
+    try:
+        status_selecionado = StatusPagamento.objects.get(
+            descricao=STATUS[status]
+        ) 
+
+        Pagamento.objects.create(
+            agendamento=agendamento_selecionado,
+            descricao=descricao,
+            valor=valor,
+            forma_pagamento=FORMAS[forma],
+            status_pagamento=status_selecionado,
+            data_pagamento=data_convertida,
+        )
+
+    except StatusPagamento.DoesNotExist:
+        print("\nStatus não encontrado no banco de dados!")
+        return
 
     print("\nPagamento registrado com sucesso!")

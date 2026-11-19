@@ -75,10 +75,6 @@ class Usuario(models.Model):
         db_table = 'usuarios'
         managed = True
 
-
-
-
-
 class Prontuario(models.Model):
     id_prontuario = models.AutoField(primary_key=True)
 
@@ -189,3 +185,35 @@ class Agendamento(models.Model):
     class Meta:
         db_table = 'agendamentos'
         managed = False
+
+class StatusPagamento(models.Model):
+    id_status = models.AutoField(primary_key=True)
+    descricao = models.CharField(max_length=50)
+
+    class Meta:
+        db_table = "status_pagamento"
+
+
+class Pagamento(models.Model):
+    id_pagamento = models.AutoField(primary_key=True)
+
+    agendamento = models.ForeignKey(
+        Agendamento,
+        on_delete=models.PROTECT,
+        db_column="agendamento_id"
+    )
+
+    descricao = models.CharField(max_length=255)
+    valor = models.DecimalField(max_digits=10, decimal_places=2)
+    forma_pagamento = models.CharField(max_length=50)
+
+    status_pagamento = models.ForeignKey(
+        StatusPagamento,
+        on_delete=models.PROTECT,
+        db_column="status_pagamento_id"
+    )
+
+    data_pagamento = models.DateField()
+
+    class Meta:
+        db_table = "pagamentos"
