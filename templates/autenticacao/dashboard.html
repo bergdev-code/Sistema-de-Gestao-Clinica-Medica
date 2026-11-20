@@ -1,0 +1,75 @@
+
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Painel | Sistema de Gestão Clínica</title>
+
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+</head>
+
+<body>
+
+    <header class="topbar">
+
+        <div class="brand">
+            <h2>Sistema de Gestão Clínica</h2>
+        </div>
+
+        <div class="user-info">
+            <div class="user-details">
+                <strong>{{ request.session.username }}</strong>
+                <span>{{ request.session.perfil }}</span>
+            </div>
+
+            <form method="POST" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit" class="logout-button">
+                    Sair
+                </button>
+            </form>
+        </div>
+
+    </header>
+
+    <main class="dashboard-container">
+
+        <section class="welcome-section">
+
+            <h1>Bem-vindo, {{ request.session.username }}!</h1>
+
+            <p>
+                Você está no painel do Sistema de Gestão Clínica.
+            </p>
+
+        </section>
+
+        <section class="dashboard-card">
+
+            <h2>Informações da conta</h2>
+
+            <div class="info-item">
+                <span>Usuário:</span>
+                <strong>{{ request.session.username }}</strong>
+            </div>
+
+            <div class="info-item">
+                <span>E-mail:</span>
+                <strong>{{ request.session.email }}</strong>
+            </div>
+
+            <div class="info-item">
+                <span>Perfil:</span>
+                <strong>{{ request.session.perfil }}</strong>
+            </div>
+
+        </section>
+
+    </main>
+
+</body>
+</html>
