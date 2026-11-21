@@ -10,6 +10,7 @@
     <title>Painel | Sistema de Gestão Clínica</title>
 
     <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
 
 <body>
@@ -68,6 +69,42 @@
             </div>
 
         </section>
+
+        {% if consultas_hoje is not None %}
+        <section class="dashboard-card" style="margin-top: 20px;">
+            <h2>Seu dia</h2>
+            <div class="info-item">
+                <span>Consultas agendadas para hoje:</span>
+                <strong>{{ consultas_hoje }}</strong>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if mostrar_proxima %}
+        <section class="dashboard-card" style="margin-top: 20px;">
+            <h2>Sua próxima consulta</h2>
+            {% if proxima_consulta %}
+            <div class="info-item">
+                <span>Data e hora:</span>
+                <strong>{{ proxima_consulta.data_hora|date:"d/m/Y H:i" }}</strong>
+            </div>
+            <div class="info-item">
+                <span>Médico:</span>
+                <strong>{{ proxima_consulta.medico.nome }}</strong>
+            </div>
+            {% else %}
+            <div class="info-item"><span>Você não tem consultas agendadas.</span></div>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        {% if atalhos %}
+        <section class="atalhos" aria-label="Acesso rápido">
+            {% for a in atalhos %}
+            <a class="atalho" href="{{ a.url }}">{{ a.titulo }}</a>
+            {% endfor %}
+        </section>
+        {% endif %}
 
     </main>
 

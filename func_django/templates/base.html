@@ -1,0 +1,49 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Painel{% endblock %} | Sistema de Gestão Clínica</title>
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+
+    <header class="topbar">
+        <div class="brand"><h2>Sistema de Gestão Clínica</h2></div>
+        <div class="user-info">
+            <div class="user-details">
+                <strong>{{ request.session.username }}</strong>
+                <span>{{ request.session.perfil }}</span>
+            </div>
+            <form method="POST" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit" class="logout-button">Sair</button>
+            </form>
+        </div>
+    </header>
+
+    <div class="app-shell">
+        <nav class="sidebar" aria-label="Menu principal">
+            <a href="{% url 'dashboard' %}" {% if ativo == 'dashboard' %}class="active"{% endif %}>Painel</a>
+            {% if 'pacientes' in menu_permitido %}<a href="{% url 'lista' 'pacientes' %}" {% if ativo == 'pacientes' %}class="active"{% endif %}>Pacientes</a>{% endif %}
+            {% if 'medicos' in menu_permitido %}<a href="{% url 'lista' 'medicos' %}" {% if ativo == 'medicos' %}class="active"{% endif %}>Médicos</a>{% endif %}
+            {% if 'especialidades' in menu_permitido %}<a href="{% url 'lista' 'especialidades' %}" {% if ativo == 'especialidades' %}class="active"{% endif %}>Especialidades</a>{% endif %}
+            {% if 'horarios' in menu_permitido %}<a href="{% url 'lista' 'horarios' %}" {% if ativo == 'horarios' %}class="active"{% endif %}>Horários</a>{% endif %}
+            {% if 'usuarios' in menu_permitido %}<a href="{% url 'lista' 'usuarios' %}" {% if ativo == 'usuarios' %}class="active"{% endif %}>Usuários</a>{% endif %}
+            {% if 'consultas' in menu_permitido %}<a href="{% url 'lista' 'consultas' %}" {% if ativo == 'consultas' %}class="active"{% endif %}>Consultas</a>{% endif %}
+            {% if 'prontuarios' in menu_permitido %}<a href="{% url 'lista' 'prontuarios' %}" {% if ativo == 'prontuarios' %}class="active"{% endif %}>Prontuários</a>{% endif %}
+            {% if 'pagamentos' in menu_permitido %}<a href="{% url 'financeiro' %}" {% if ativo == 'pagamentos' %}class="active"{% endif %}>Financeiro</a>{% endif %}
+        </nav>
+
+        <main class="content">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+</body>
+</html>

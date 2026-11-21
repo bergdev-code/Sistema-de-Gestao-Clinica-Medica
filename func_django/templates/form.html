@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="page-head"><h1>{{ titulo }}</h1></div>
+
+<form method="POST" class="form-card" novalidate>
+    {% csrf_token %}
+    {% for campo in form %}
+    <div class="form-field">
+        <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+        {{ campo }}
+        {% for erro in campo.errors %}<small class="field-error">{{ erro }}</small>{% endfor %}
+    </div>
+    {% endfor %}
+    {% for erro in form.non_field_errors %}<div class="alert alert-error">{{ erro }}</div>{% endfor %}
+
+    <div class="form-actions">
+        <a class="btn btn-secondary" href="{{ voltar }}">Cancelar</a>
+        <button type="submit" class="btn btn-primary">Salvar</button>
+    </div>
+</form>
+{% endblock %}

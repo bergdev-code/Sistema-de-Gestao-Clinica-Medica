@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Financeiro{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1>Financeiro</h1>
+    {% if pode_criar %}<a class="btn btn-primary" href="{% url 'novo_pagamento' %}">Registrar pagamento</a>{% endif %}
+</div>
+
+<section class="resumo" aria-label="Resumo financeiro">
+    <div class="resumo-card recebido"><span>Total recebido</span><strong>R$ {{ resumo.recebido|floatformat:2 }}</strong></div>
+    <div class="resumo-card pendente"><span>Total pendente</span><strong>R$ {{ resumo.pendente|floatformat:2 }}</strong></div>
+    <div class="resumo-card cancelado"><span>Total cancelado</span><strong>R$ {{ resumo.cancelado|floatformat:2 }}</strong></div>
+    <div class="resumo-card"><span>Total geral ({{ resumo.quantidade }} registros)</span><strong>R$ {{ resumo.total|floatformat:2 }}</strong></div>
+</section>
+
+<form method="GET" class="search-bar">
+    <input type="search" name="q" value="{{ q }}" placeholder="Pesquisar por paciente, CPF ou descrição">
+    <button type="submit" class="btn btn-secondary">Pesquisar</button>
+</form>
+
+<div class="table-card">
+    {% if pagamentos %}
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>Paciente</th><th>CPF</th><th>Descrição</th><th>Valor</th>
+                    <th>Forma</th><th>Status</th><th>Data</th>{% if pode_excluir %}<th class="col-acoes">Ações</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in pagamentos %}
+                <tr>
+                    <td>{{ p.agendamento.paciente.nome }}</td>
+                    <td>{{ p.agendamento.paciente.cpf }}</td>
+                    <td>{{ p.descricao }}</td>
+                    <td>R$ {{ p.valor|floatformat:2 }}</td>
+                    <td>{{ p.forma_pagamento }}</td>
+                    <td><span class="badge {% if p.status_pagamento.descricao == 'Concluído' %}badge-ok{% elif p.status_pagamento.descricao == 'Pendente' %}badge-warn{% else %}badge-off{% endif %}">{{ p.status_pagamento.descricao }}</span></td>
+                    <td>{{ p.data_pagamento|date:"d/m/Y" }}</td>
+                    {% if pode_excluir %}<td class="col-acoes">
+                        <form method="POST" action="{% url 'excluir' 'pagamentos' p.pk %}"
+                              onsubmit="return confirm('Excluir este pagamento? Essa ação não pode ser desfeita.');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
+                        </form>
+                    </td>{% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty">Nenhum pagamento encontrado. Use "Registrar pagamento" para adicionar o primeiro.</p>
+    {% endif %}
+</div>
+{% endblock %}
