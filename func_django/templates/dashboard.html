@@ -79,6 +79,17 @@
         </section>
         {% endif %}
 
+        {% if solicitacoes_pendentes is not None %}
+        <section class="dashboard-card" style="margin-top: 20px;">
+            <h2>Solicitações de consulta</h2>
+            <div class="info-item">
+                <span>Aguardando resposta:</span>
+                <strong>{{ solicitacoes_pendentes }}</strong>
+            </div>
+            <p style="margin-top: 16px;"><a class="btn btn-primary" href="{% url 'lista' 'consultas' %}">Ver consultas</a></p>
+        </section>
+        {% endif %}
+
         {% if mostrar_proxima %}
         <section class="dashboard-card" style="margin-top: 20px;">
             <h2>Sua próxima consulta</h2>
@@ -94,6 +105,7 @@
             {% else %}
             <div class="info-item"><span>Você não tem consultas agendadas.</span></div>
             {% endif %}
+            <p style="margin-top: 16px;"><a class="btn btn-primary" href="{% url 'solicitar_consulta' %}">Solicitar consulta</a></p>
         </section>
         {% endif %}
 

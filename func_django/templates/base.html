@@ -31,6 +31,7 @@
             {% if 'medicos' in menu_permitido %}<a href="{% url 'lista' 'medicos' %}" {% if ativo == 'medicos' %}class="active"{% endif %}>Médicos</a>{% endif %}
             {% if 'especialidades' in menu_permitido %}<a href="{% url 'lista' 'especialidades' %}" {% if ativo == 'especialidades' %}class="active"{% endif %}>Especialidades</a>{% endif %}
             {% if 'horarios' in menu_permitido %}<a href="{% url 'lista' 'horarios' %}" {% if ativo == 'horarios' %}class="active"{% endif %}>Horários</a>{% endif %}
+            {% if 'vinculos' in menu_permitido %}<a href="{% url 'lista' 'vinculos' %}" {% if ativo == 'vinculos' %}class="active"{% endif %}>Médicos x Especialid.</a>{% endif %}
             {% if 'usuarios' in menu_permitido %}<a href="{% url 'lista' 'usuarios' %}" {% if ativo == 'usuarios' %}class="active"{% endif %}>Usuários</a>{% endif %}
             {% if 'consultas' in menu_permitido %}<a href="{% url 'lista' 'consultas' %}" {% if ativo == 'consultas' %}class="active"{% endif %}>Consultas</a>{% endif %}
             {% if 'prontuarios' in menu_permitido %}<a href="{% url 'lista' 'prontuarios' %}" {% if ativo == 'prontuarios' %}class="active"{% endif %}>Prontuários</a>{% endif %}

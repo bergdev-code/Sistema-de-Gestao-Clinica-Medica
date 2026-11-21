@@ -17,7 +17,7 @@
 
     <div class="form-actions">
         <a class="btn btn-secondary" href="{{ voltar }}">Cancelar</a>
-        <button type="submit" class="btn btn-primary">Salvar</button>
+        <button type="submit" class="btn btn-primary">{{ botao|default:"Salvar" }}</button>
     </div>
 </form>
 {% endblock %}

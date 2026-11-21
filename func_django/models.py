@@ -70,6 +70,14 @@ class Usuario(models.Model):
     null=True,
     blank=True
 )
+
+    paciente = models.ForeignKey(
+        func_django,
+        on_delete=models.PROTECT,
+        db_column='paciente_cpf',
+        null=True,
+        blank=True
+    )
     
     class Meta:
         db_table = 'usuarios'

@@ -21,7 +21,7 @@ from django.views.decorators.http import require_POST
 
 from sistema_clinica.funcionalidades.regex import validar_email, validar_nome
 from func_django.models import (
-    Agendamento, Especialidade, HorarioMedico, Medico, Pagamento,
+    Agendamento, Especialidade, HorarioMedico, Medico, MedicoEspecialidade, Pagamento,
     Prontuario, StatusPagamento, Usuario, func_django,
 )
 
@@ -126,6 +126,11 @@ RECURSOS = {
         "colunas": [("nome", "Nome")],
         "busca": ["nome"],
     },
+    "vinculos": {
+        "model": MedicoEspecialidade, "titulo": "Especialidades dos médicos",
+        "colunas": [("medico", "Médico"), ("especialidade", "Especialidade")],
+        "busca": ["medico__nome", "especialidade__nome"],
+    },
     "horarios": {
         "model": HorarioMedico, "titulo": "Horários dos médicos",
         "colunas": [("medico", "Médico"), ("dia_semana", "Dia"), ("hora_inicio", "Início"), ("hora_fim", "Fim")],
@@ -174,15 +179,16 @@ PERFIL_MEDICO = "Médico"
 PERFIL_PACIENTE = "Paciente"
 
 PERMISSOES = {
-    "Administrador": {"*": {"ver", "criar", "excluir"}},
-    "ADMIN GERAL": {"*": {"ver", "criar", "excluir"}},  # usuário root
+    "Administrador": {"*": {"ver", "criar", "excluir", "aceitar"}},
+    "ADMIN GERAL": {"*": {"ver", "criar", "excluir", "aceitar"}},  # usuário root
     "Recepcionista": {
         "pacientes": {"ver", "criar", "excluir"},
-        "consultas": {"ver", "criar", "excluir"},
+        "consultas": {"ver", "criar", "excluir", "aceitar"},
         "pagamentos": {"ver", "criar", "excluir"},
         "medicos": {"ver"},
         "especialidades": {"ver"},
         "horarios": {"ver"},
+        "vinculos": {"ver"},
     },
     PERFIL_MEDICO: {
         "pacientes": {"ver"},
@@ -191,9 +197,9 @@ PERMISSOES = {
     },
     # paciente só consulta os próprios dados (o filtro está em aplicar_escopo)
     PERFIL_PACIENTE: {
-        "consultas": {"ver"},
+        "consultas": {"ver", "solicitar"},
         "prontuarios": {"ver"},
-        "pagamentos": {"ver"},
+        "pagamentos": {"ver", "pagar"},
     },
 }
 
@@ -225,13 +231,24 @@ def exigir(request, recurso, acao):
         raise PermissionDenied
 
 
+def cpf_da_sessao(request):
+    """CPF do paciente ligado ao usuário. Se a sessão ainda não o tem (login feito
+    antes do vínculo), busca no banco, sem precisar sair e entrar de novo."""
+    cpf = request.session.get("cpf")
+    if not cpf and request.session.get("username"):
+        cpf = (Usuario.objects.filter(username=request.session["username"])
+               .values_list("paciente_id", flat=True).first()) or ""
+        request.session["cpf"] = cpf
+    return cpf
+
+
 def aplicar_escopo(request, cfg, qs):
     """Médico e paciente só enxergam registros ligados a eles."""
     perfil = request.session.get("perfil")
     if chave_perfil(perfil) == _n(PERFIL_MEDICO):
         chave, valor = "medico", request.session.get("crm")
     elif chave_perfil(perfil) == _n(PERFIL_PACIENTE):
-        chave, valor = "paciente", request.session.get("cpf")
+        chave, valor = "paciente", cpf_da_sessao(request)
     else:
         return qs
     campo = cfg.get("escopo", {}).get(chave)
@@ -327,9 +344,13 @@ def dashboard(request):
             medico=crm, data_hora__date=timezone.localdate()
         ).count()
 
+    solicitacoes_pendentes = None
+    if "aceitar" in acoes_do_perfil(perfil, "consultas"):
+        solicitacoes_pendentes = Agendamento.objects.filter(filtro_status(NOMES_SOLICITADA)).count()
+
     mostrar_proxima = chave_perfil(perfil) == _n(PERFIL_PACIENTE)
     proxima_consulta = None
-    cpf = request.session.get("cpf")
+    cpf = cpf_da_sessao(request)
     if mostrar_proxima and cpf:
         proxima_consulta = (
             Agendamento.objects.select_related("medico")
@@ -340,6 +361,7 @@ def dashboard(request):
     return render(request, "dashboard.html", {
         "ativo": "dashboard", "atalhos": atalhos, "consultas_hoje": consultas_hoje,
         "mostrar_proxima": mostrar_proxima, "proxima_consulta": proxima_consulta,
+        "solicitacoes_pendentes": solicitacoes_pendentes,
     })
 
 
@@ -384,6 +406,8 @@ def lista(request, recurso):
     qs = cfg["model"].objects.all()
 
     qs = aplicar_escopo(request, cfg, qs)
+    if recurso == "consultas" and chave_perfil(request.session.get("perfil")) == _n(PERFIL_MEDICO):
+        qs = qs.exclude(filtro_status(NOMES_SOLICITADA))  # médico vê só o que a recepção já aceitou
     relacionados = [c for c, _ in cfg["colunas"] if cfg["model"]._meta.get_field(c).is_relation]
     if relacionados:
         qs = qs.select_related(*relacionados)
@@ -397,7 +421,8 @@ def lista(request, recurso):
 
     campos = [c for c, _ in cfg["colunas"]]
     linhas = [
-        {"pk": obj.pk, "valores": [formatar(getattr(obj, c)) for c in campos]}
+        {"pk": obj.pk, "valores": [formatar(getattr(obj, c)) for c in campos],
+         "pendente": recurso == "consultas" and eh_status(obj, NOMES_SOLICITADA)}
         for obj in qs
     ]
     return render(request, "lista.html", {
@@ -405,6 +430,10 @@ def lista(request, recurso):
         "colunas": [r for _, r in cfg["colunas"]], "linhas": linhas, "q": q,
         "pode_criar": cfg.get("criar", True) and "criar" in acoes,
         "pode_excluir": "excluir" in acoes,
+        "pode_aceitar": recurso == "consultas" and "aceitar" in acoes,
+        "pode_solicitar": recurso == "consultas" and "solicitar" in acoes,
+        "pendentes": (Agendamento.objects.filter(filtro_status(NOMES_SOLICITADA)).count()
+                      if recurso == "consultas" and "aceitar" in acoes else 0),
     })
 
 
@@ -502,6 +531,8 @@ def financeiro(request):
     return render(request, "financeiro.html", {
         "ativo": "pagamentos", "resumo": resumo, "q": q,
         "pode_criar": "criar" in acoes, "pode_excluir": "excluir" in acoes,
+        "pode_pagar": "pagar" in acoes,
+        "eh_paciente": chave_perfil(request.session.get("perfil")) == _n(PERFIL_PACIENTE),
         "pagamentos": pagamentos.order_by("-data_pagamento", "-id_pagamento"),
     })
 
@@ -551,3 +582,176 @@ def novo_pagamento(request):
         "form": form, "recurso": "pagamentos", "ativo": "pagamentos",
         "titulo": "Registrar pagamento", "voltar": reverse("financeiro"),
     })
+
+
+# ==================================================
+# SOLICITAÇÃO E ACEITE DE CONSULTAS
+# ==================================================
+# Nomes aceitos na tabela status_agendamento (se não existir, o primeiro é criado)
+NOMES_SOLICITADA = ("Solicitada", "Solicitado")
+NOMES_CONFIRMADA = ("Agendada", "Agendado", "Confirmada", "Confirmado")
+NOMES_CANCELADA = ("Cancelada", "Cancelado", "Recusada", "Recusado")
+
+
+def filtro_status(nomes):
+    filtro = Q()
+    for nome in nomes:
+        filtro |= Q(status__descricao__iexact=nome)
+    return filtro
+
+
+def eh_status(agendamento, nomes):
+    return _n(agendamento.status.descricao) in {_n(n) for n in nomes}
+
+
+def obter_status(nomes):
+    return (
+        StatusAgendamento.objects.filter(descricao__iexact=nomes[0]).first()
+        or next((st for st in (StatusAgendamento.objects.filter(descricao__iexact=n).first() for n in nomes[1:]) if st), None)
+        or StatusAgendamento.objects.create(descricao=nomes[0])
+    )
+
+
+def agora_como(data):
+    return timezone.now() if timezone.is_aware(data) else dt.datetime.now()
+
+
+class SolicitarConsultaForm(forms.Form):
+    especialidade = forms.ModelChoiceField(
+        queryset=Especialidade.objects.filter(medicoespecialidade__medico__ativo=True).distinct().order_by("nome"),
+        label="Especialidade",
+    )
+    data_hora = forms.DateTimeField(
+        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+        label="Data e hora desejadas",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["especialidade"].label_from_instance = lambda e: e.nome
+
+    def clean(self):
+        dados = super().clean()
+        esp, quando = dados.get("especialidade"), dados.get("data_hora")
+        if esp and quando:
+            if quando <= agora_como(quando):
+                self.add_error("data_hora", "Escolha uma data e hora futuras.")
+            else:
+                # primeiro médico ativo da especialidade que esteja livre nesse horário
+                ocupados = (Agendamento.objects.filter(data_hora=quando)
+                            .exclude(filtro_status(NOMES_CANCELADA)).values("medico_id"))
+                medico = (Medico.objects.filter(ativo=True, medicoespecialidade__especialidade=esp)
+                          .exclude(pk__in=ocupados).order_by("nome").first())
+                if medico is None:
+                    self.add_error("data_hora", f"Nenhum médico de {esp.nome} disponível nesse horário. Escolha outro.")
+                else:
+                    dados["medico"] = medico
+        return dados
+
+
+@login_requerido
+def solicitar_consulta(request):
+    exigir(request, "consultas", "solicitar")
+    cpf = cpf_da_sessao(request)
+    paciente = func_django.objects.filter(cpf=cpf).first() if cpf else None
+    if paciente is None:
+        messages.error(request, "Seu usuário não está vinculado a um paciente. Procure a recepção.")
+        return redirect("lista", recurso="consultas")
+
+    form = SolicitarConsultaForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        Agendamento.objects.create(
+            paciente=paciente, medico=form.cleaned_data["medico"],
+            data_hora=form.cleaned_data["data_hora"], status=obter_status(NOMES_SOLICITADA),
+        )
+        messages.success(request, f"Solicitação enviada para {form.cleaned_data['especialidade'].nome} (Dr(a). {form.cleaned_data['medico'].nome}). Aguarde a confirmação da recepção.")
+        return redirect("lista", recurso="consultas")
+    return render(request, "form.html", {
+        "form": form, "recurso": "consultas", "ativo": "consultas",
+        "titulo": "Solicitar consulta", "botao": "Enviar solicitação",
+        "voltar": reverse("lista", args=["consultas"]),
+    })
+
+
+@login_requerido
+@require_POST
+def responder_consulta(request, pk, acao):
+    exigir(request, "consultas", "aceitar")
+    ag = get_object_or_404(Agendamento.objects.select_related("status", "medico"), pk=pk)
+
+    if not eh_status(ag, NOMES_SOLICITADA):
+        messages.warning(request, "Esta solicitação já foi respondida.")
+    elif acao == "aceitar":
+        ocupado = (
+            Agendamento.objects.filter(medico=ag.medico, data_hora=ag.data_hora).exclude(pk=ag.pk)
+            .exclude(filtro_status(NOMES_CANCELADA)).exclude(filtro_status(NOMES_SOLICITADA)).exists()
+        )
+        if ocupado:
+            messages.error(request, "Não foi possível aceitar: o médico já tem consulta marcada nesse horário.")
+        else:
+            ag.status = obter_status(NOMES_CONFIRMADA)
+            ag.save(update_fields=["status"])
+            messages.success(request, "Consulta aceita e agendada.")
+    else:
+        ag.status = obter_status(NOMES_CANCELADA)
+        ag.save(update_fields=["status"])
+        messages.success(request, "Solicitação recusada.")
+    return redirect("lista", recurso="consultas")
+
+
+# ==================================================
+# PAGAMENTO PELO PACIENTE
+# ==================================================
+
+class PagamentoPacienteForm(forms.Form):
+    agendamento = AgendamentoChoice(queryset=Agendamento.objects.none(), label="Consulta a pagar")
+    valor = forms.DecimalField(
+        min_value=Decimal("0.01"), max_digits=10, decimal_places=2, localize=True, label="Valor (R$)",
+        error_messages={"min_value": "O valor deve ser maior que zero."},
+    )
+    forma_pagamento = forms.ChoiceField(choices=[(f, f) for f in FORMAS], label="Forma de pagamento")
+
+    def __init__(self, *args, cpf=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["agendamento"].queryset = (
+            Agendamento.objects.select_related("paciente", "status").filter(paciente=cpf)
+            .exclude(filtro_status(NOMES_CANCELADA)).exclude(filtro_status(NOMES_SOLICITADA))
+            .order_by("-data_hora")
+        )
+
+
+@login_requerido
+def pagar(request):
+    exigir(request, "pagamentos", "pagar")
+    cpf = cpf_da_sessao(request) or None
+    form = PagamentoPacienteForm(request.POST or None, cpf=cpf)
+    if request.method == "POST" and form.is_valid():
+        ag = form.cleaned_data["agendamento"]
+        pendente = (StatusPagamento.objects.filter(descricao__iexact="Pendente").first()
+                    or StatusPagamento.objects.create(descricao="Pendente"))
+        Pagamento.objects.create(
+            agendamento=ag, descricao=f"Consulta de {formatar(ag.data_hora)}",
+            valor=form.cleaned_data["valor"], forma_pagamento=form.cleaned_data["forma_pagamento"],
+            status_pagamento=pendente, data_pagamento=dt.date.today(),
+        )
+        messages.success(request, "Pagamento enviado! A recepção irá confirmar o recebimento.")
+        return redirect("financeiro")
+    return render(request, "form.html", {
+        "form": form, "recurso": "pagamentos", "ativo": "pagamentos",
+        "titulo": "Realizar pagamento", "botao": "Enviar pagamento", "voltar": reverse("financeiro"),
+    })
+
+
+@login_requerido
+@require_POST
+def confirmar_pagamento(request, pk):
+    exigir(request, "pagamentos", "criar")
+    pag = get_object_or_404(Pagamento.objects.select_related("status_pagamento"), pk=pk)
+    if _n(pag.status_pagamento.descricao) == "pendente":
+        pag.status_pagamento = (StatusPagamento.objects.filter(descricao__iexact="Concluído").first()
+                                or StatusPagamento.objects.create(descricao="Concluído"))
+        pag.save(update_fields=["status_pagamento"])
+        messages.success(request, "Pagamento confirmado.")
+    else:
+        messages.warning(request, "Este pagamento não está pendente.")
+    return redirect("financeiro")

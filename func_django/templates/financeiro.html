@@ -3,10 +3,14 @@
 
 {% block content %}
 <div class="page-head">
-    <h1>Financeiro</h1>
-    {% if pode_criar %}<a class="btn btn-primary" href="{% url 'novo_pagamento' %}">Registrar pagamento</a>{% endif %}
+    <h1>{% if eh_paciente %}Meus pagamentos{% else %}Financeiro{% endif %}</h1>
+    <div class="acoes-linha">
+        {% if pode_pagar %}<a class="btn btn-primary" href="{% url 'pagar' %}">Realizar pagamento</a>{% endif %}
+        {% if pode_criar %}<a class="btn btn-primary" href="{% url 'novo_pagamento' %}">Registrar pagamento</a>{% endif %}
+    </div>
 </div>
 
+{% if not eh_paciente %}
 <section class="resumo" aria-label="Resumo financeiro">
     <div class="resumo-card recebido"><span>Total recebido</span><strong>R$ {{ resumo.recebido|floatformat:2 }}</strong></div>
     <div class="resumo-card pendente"><span>Total pendente</span><strong>R$ {{ resumo.pendente|floatformat:2 }}</strong></div>
@@ -18,6 +22,7 @@
     <input type="search" name="q" value="{{ q }}" placeholder="Pesquisar por paciente, CPF ou descrição">
     <button type="submit" class="btn btn-secondary">Pesquisar</button>
 </form>
+{% endif %}
 
 <div class="table-card">
     {% if pagamentos %}
@@ -25,34 +30,49 @@
         <table>
             <thead>
                 <tr>
-                    <th>Paciente</th><th>CPF</th><th>Descrição</th><th>Valor</th>
-                    <th>Forma</th><th>Status</th><th>Data</th>{% if pode_excluir %}<th class="col-acoes">Ações</th>{% endif %}
+                    {% if not eh_paciente %}<th>Paciente</th><th>CPF</th>{% endif %}
+                    <th>Descrição</th><th>Valor</th><th>Forma</th><th>Status</th><th>Data</th>
+                    {% if pode_excluir or pode_criar %}<th class="col-acoes">Ações</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for p in pagamentos %}
                 <tr>
+                    {% if not eh_paciente %}
                     <td>{{ p.agendamento.paciente.nome }}</td>
                     <td>{{ p.agendamento.paciente.cpf }}</td>
+                    {% endif %}
                     <td>{{ p.descricao }}</td>
                     <td>R$ {{ p.valor|floatformat:2 }}</td>
                     <td>{{ p.forma_pagamento }}</td>
                     <td><span class="badge {% if p.status_pagamento.descricao == 'Concluído' %}badge-ok{% elif p.status_pagamento.descricao == 'Pendente' %}badge-warn{% else %}badge-off{% endif %}">{{ p.status_pagamento.descricao }}</span></td>
                     <td>{{ p.data_pagamento|date:"d/m/Y" }}</td>
-                    {% if pode_excluir %}<td class="col-acoes">
-                        <form method="POST" action="{% url 'excluir' 'pagamentos' p.pk %}"
-                              onsubmit="return confirm('Excluir este pagamento? Essa ação não pode ser desfeita.');">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
-                        </form>
-                    </td>{% endif %}
+                    {% if pode_excluir or pode_criar %}
+                    <td class="col-acoes">
+                        <div class="acoes-linha">
+                            {% if pode_criar and p.status_pagamento.descricao == 'Pendente' %}
+                            <form method="POST" action="{% url 'confirmar_pagamento' p.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-success btn-sm">Confirmar</button>
+                            </form>
+                            {% endif %}
+                            {% if pode_excluir %}
+                            <form method="POST" action="{% url 'excluir' 'pagamentos' p.pk %}"
+                                  onsubmit="return confirm('Excluir este pagamento? Essa ação não pode ser desfeita.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                    {% endif %}
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% else %}
-    <p class="empty">Nenhum pagamento encontrado. Use "Registrar pagamento" para adicionar o primeiro.</p>
+    <p class="empty">Nenhum pagamento encontrado.</p>
     {% endif %}
 </div>
 {% endblock %}

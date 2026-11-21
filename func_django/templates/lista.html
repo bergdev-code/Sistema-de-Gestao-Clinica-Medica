@@ -4,8 +4,15 @@
 {% block content %}
 <div class="page-head">
     <h1>{{ titulo }}</h1>
-    {% if pode_criar %}<a class="btn btn-primary" href="{% url 'novo' recurso %}">Cadastrar</a>{% endif %}
+    <div class="acoes-linha">
+        {% if pode_solicitar %}<a class="btn btn-primary" href="{% url 'solicitar_consulta' %}">Solicitar consulta</a>{% endif %}
+        {% if pode_criar %}<a class="btn btn-primary" href="{% url 'novo' recurso %}">Cadastrar</a>{% endif %}
+    </div>
 </div>
+
+{% if pode_aceitar and pendentes %}
+<div class="alert alert-info">{{ pendentes }} solicitação(ões) de consulta aguardando resposta.</div>
+{% endif %}
 
 <form method="GET" class="search-bar">
     <input type="search" name="q" value="{{ q }}" placeholder="Pesquisar em {{ titulo|lower }}">
@@ -19,27 +26,44 @@
             <thead>
                 <tr>
                     {% for c in colunas %}<th>{{ c }}</th>{% endfor %}
-                    {% if pode_excluir %}<th class="col-acoes">Ações</th>{% endif %}
+                    {% if pode_excluir or pode_aceitar %}<th class="col-acoes">Ações</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for linha in linhas %}
                 <tr>
                     {% for valor in linha.valores %}<td>{{ valor|default:"—" }}</td>{% endfor %}
-                    {% if pode_excluir %}<td class="col-acoes">
-                        <form method="POST" action="{% url 'excluir' recurso linha.pk %}"
-                              onsubmit="return confirm('Excluir este registro? Essa ação não pode ser desfeita.');">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
-                        </form>
-                    </td>{% endif %}
+                    {% if pode_excluir or pode_aceitar %}
+                    <td class="col-acoes">
+                        <div class="acoes-linha">
+                            {% if linha.pendente and pode_aceitar %}
+                            <form method="POST" action="{% url 'aceitar_consulta' linha.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-success btn-sm">Aceitar</button>
+                            </form>
+                            <form method="POST" action="{% url 'recusar_consulta' linha.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-secondary btn-sm">Recusar</button>
+                            </form>
+                            {% endif %}
+                            {% if pode_excluir %}
+                            <form method="POST" action="{% url 'excluir' recurso linha.pk %}"
+                                  onsubmit="return confirm('Excluir este registro? Essa ação não pode ser desfeita.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                    {% endif %}
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% else %}
-    <p class="empty">Nenhum registro encontrado. {% if pode_criar %}Use "Cadastrar" para adicionar o primeiro.{% endif %}</p>
+    <p class="empty">Nenhum registro encontrado.
+        {% if pode_solicitar %}Use "Solicitar consulta" para pedir um horário.{% elif pode_criar %}Use "Cadastrar" para adicionar o primeiro.{% endif %}</p>
     {% endif %}
 </div>
 {% endblock %}
