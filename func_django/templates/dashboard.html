@@ -1,4 +1,3 @@
-
 {% load static %}
 
 <!DOCTYPE html>
@@ -104,6 +103,11 @@
             <a class="atalho" href="{{ a.url }}">{{ a.titulo }}</a>
             {% endfor %}
         </section>
+        {% else %}
+        <div class="alert alert-warning" style="margin-top: 20px;">
+            Nenhuma tela está liberada para o perfil "{{ request.session.perfil }}".
+            Peça ao administrador para conferir o nome do perfil.
+        </div>
         {% endif %}
 
     </main>

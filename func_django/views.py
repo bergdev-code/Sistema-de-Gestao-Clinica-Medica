@@ -1,7 +1,9 @@
+import datetime as dt
 import hashlib
 import hmac
 import os
 import secrets
+import unicodedata
 from decimal import Decimal
 from functools import wraps
 
@@ -54,6 +56,9 @@ class UsuarioForm(forms.ModelForm):
             Medico.objects.filter(ativo=True).order_by("nome")
             .exclude(crm__in=Usuario.objects.filter(medico__isnull=False).values_list("medico_id", flat=True))
         )
+        for nome_campo in ("id_perfil", "medico", "paciente"):
+            if nome_campo in self.fields:
+                self.fields[nome_campo].label_from_instance = rotulo
         if "paciente" in self.fields:
             self.fields["paciente"].queryset = func_django.objects.exclude(
                 cpf__in=Usuario.objects.filter(paciente__isnull=False).values_list("paciente_id", flat=True)
@@ -76,7 +81,7 @@ class UsuarioForm(forms.ModelForm):
     def clean(self):
         dados = super().clean()
         perfil = dados.get("id_perfil")
-        nome = _n(perfil.nome_perfil) if perfil else ""
+        nome = chave_perfil(perfil.nome_perfil) if perfil else ""
 
         if nome == _n(PERFIL_MEDICO):
             if not dados.get("medico"):
@@ -161,7 +166,8 @@ RECURSOS = {
 # (com acento e maiúsculas). "*" = todos os recursos.
 # Ações: "ver", "criar", "excluir". Chave "pagamentos" = tela Financeiro.
 def _n(perfil):
-    return (perfil or "").strip().casefold()
+    texto = unicodedata.normalize("NFKD", (perfil or "").strip().casefold())
+    return "".join(c for c in texto if not unicodedata.combining(c))
 
 
 PERFIL_MEDICO = "Médico"
@@ -185,7 +191,6 @@ PERMISSOES = {
     },
     # paciente só consulta os próprios dados (o filtro está em aplicar_escopo)
     PERFIL_PACIENTE: {
-        "pacientes": {"ver"},
         "consultas": {"ver"},
         "prontuarios": {"ver"},
         "pagamentos": {"ver"},
@@ -196,8 +201,22 @@ PERMISSOES = {
 PERMISSOES = {_n(k): v for k, v in PERMISSOES.items()}
 
 
+# Se o nome do perfil no banco for parecido (ex.: "Recepção", "Admin"), usa a regra certa
+PREFIXOS = {"admin": "administrador", "recep": "recepcionista", "medic": "medico", "pacien": "paciente"}
+
+
+def chave_perfil(perfil):
+    n = _n(perfil)
+    if n in PERMISSOES:
+        return n
+    for prefixo, chave in PREFIXOS.items():
+        if n.startswith(prefixo):
+            return chave
+    return n
+
+
 def acoes_do_perfil(perfil, recurso):
-    perms = PERMISSOES.get(_n(perfil), {})
+    perms = PERMISSOES.get(chave_perfil(perfil), {})
     return perms.get("*", perms.get(recurso, set()))
 
 
@@ -209,9 +228,9 @@ def exigir(request, recurso, acao):
 def aplicar_escopo(request, cfg, qs):
     """Médico e paciente só enxergam registros ligados a eles."""
     perfil = request.session.get("perfil")
-    if _n(perfil) == _n(PERFIL_MEDICO):
+    if chave_perfil(perfil) == _n(PERFIL_MEDICO):
         chave, valor = "medico", request.session.get("crm")
-    elif _n(perfil) == _n(PERFIL_PACIENTE):
+    elif chave_perfil(perfil) == _n(PERFIL_PACIENTE):
         chave, valor = "paciente", request.session.get("cpf")
     else:
         return qs
@@ -303,12 +322,12 @@ def dashboard(request):
 
     consultas_hoje = None
     crm = request.session.get("crm")
-    if _n(perfil) == _n(PERFIL_MEDICO) and crm:
+    if chave_perfil(perfil) == _n(PERFIL_MEDICO) and crm:
         consultas_hoje = Agendamento.objects.filter(
             medico=crm, data_hora__date=timezone.localdate()
         ).count()
 
-    mostrar_proxima = _n(perfil) == _n(PERFIL_PACIENTE)
+    mostrar_proxima = chave_perfil(perfil) == _n(PERFIL_PACIENTE)
     proxima_consulta = None
     cpf = request.session.get("cpf")
     if mostrar_proxima and cpf:
@@ -324,14 +343,37 @@ def dashboard(request):
     })
 
 
+def rotulo(obj):
+    """Texto legível de um registro (usado nas tabelas e nas listas de seleção)."""
+    if isinstance(obj, Agendamento):
+        return f"{obj.paciente.nome or obj.paciente.cpf} - {formatar(obj.data_hora)}"
+    if isinstance(obj, Medico):
+        return f"{obj.nome} (CRM {obj.crm})"
+    if isinstance(obj, func_django):
+        return f"{obj.nome or 'Sem nome'} ({obj.cpf})"
+    for attr in ("nome", "descricao", "nome_perfil", "username"):
+        valor = getattr(obj, attr, None)
+        if valor:
+            return str(valor)
+    return str(obj)
+
+
 def formatar(valor):
     if isinstance(valor, bool):
         return "Sim" if valor else "Não"
     if valor is None:
         return ""
-    if isinstance(valor, (int, float, str)) or hasattr(valor, "year") or hasattr(valor, "hour"):
-        return valor
-    return str(valor)  # chaves estrangeiras usam o __str__ do model
+    if isinstance(valor, dt.datetime):
+        if timezone.is_aware(valor):
+            valor = timezone.localtime(valor)
+        return valor.strftime("%d/%m/%Y %H:%M")
+    if isinstance(valor, dt.date):
+        return valor.strftime("%d/%m/%Y")
+    if isinstance(valor, dt.time):
+        return valor.strftime("%H:%M")
+    if isinstance(valor, models.Model):
+        return rotulo(valor)
+    return valor
 
 
 @login_requerido
@@ -342,6 +384,9 @@ def lista(request, recurso):
     qs = cfg["model"].objects.all()
 
     qs = aplicar_escopo(request, cfg, qs)
+    relacionados = [c for c, _ in cfg["colunas"] if cfg["model"]._meta.get_field(c).is_relation]
+    if relacionados:
+        qs = qs.select_related(*relacionados)
 
     q = request.GET.get("q", "").strip()
     if q and cfg["busca"]:
@@ -367,6 +412,8 @@ def _campo_form(campo, **kwargs):
     f = campo.formfield(**kwargs)
     if f is None:
         return None
+    if isinstance(campo, models.ForeignKey):
+        f.label_from_instance = rotulo
     if isinstance(campo, models.DateTimeField):
         f.widget = forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M")
     elif isinstance(campo, models.DateField):
@@ -481,6 +528,10 @@ class PagamentoForm(forms.ModelForm):
     data_pagamento = forms.DateField(
         widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"), label="Data do pagamento",
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["status_pagamento"].label_from_instance = rotulo
 
     class Meta:
         model = Pagamento
