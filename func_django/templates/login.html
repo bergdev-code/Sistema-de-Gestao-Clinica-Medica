@@ -48,12 +48,13 @@
 
                 <form method="POST" action="{% url 'login' %}">
                     {% csrf_token %}
-                    <div class="field">
-                        <label for="identificador">E-mail</label>
-                        <input type="email" id="identificador" name="identificador"
-                               placeholder="voce@exemplo.com" maxlength="50"
-                               autocomplete="username" required>
-                    </div>
+                    
+<div class="field">
+    <label for="identificador">E-mail ou nome de usuário</label>
+    <input type="text" id="identificador" name="identificador"
+           placeholder="Digite seu e-mail ou usuário" maxlength="50"
+           autocomplete="username" required>
+</div>
 
                     <div class="field">
                         <div class="label-line"><label for="senha">Senha</label></div>

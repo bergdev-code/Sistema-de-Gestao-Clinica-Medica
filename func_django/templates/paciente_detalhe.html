@@ -1,0 +1,314 @@
+
+{% extends 'base.html' %}
+
+{% block title %}Paciente - {{ paciente.nome }}{% endblock %}
+
+{% block content %}
+
+<div class="page-head paciente-head">
+    <div>
+        <h1>Perfil do paciente</h1>
+        <p>Informações pessoais e histórico clínico</p>
+    </div>
+
+    <a href="{% url 'lista' 'pacientes' %}" class="btn btn-secondary">
+        Voltar
+    </a>
+</div>
+
+<!-- DADOS PESSOAIS -->
+<section class="paciente-card paciente-identificacao">
+
+    <div class="paciente-avatar">
+        <span>{{ paciente.nome|first|upper }}</span>
+    </div>
+
+    <div class="paciente-identificacao-info">
+        <h2>{{ paciente.nome }}</h2>
+
+        <p>
+            <strong>CPF:</strong> {{ paciente.cpf }}
+        </p>
+
+        <p>
+            <strong>Telefone:</strong>
+            {{ paciente.telefone|default:"Não informado" }}
+        </p>
+
+        <p>
+            <strong>Nascimento:</strong>
+            {{ paciente.data_nascimento|date:"d/m/Y"|default:"Não informado" }}
+        </p>
+
+        <p>
+            <strong>Médico responsável:</strong>
+            {{ paciente.medico.nome|default:"Não definido" }}
+        </p>
+    </div>
+
+</section>
+
+<!-- INDICADORES -->
+<section class="paciente-indicadores">
+
+    <div class="paciente-indicador">
+        <span>Consultas</span>
+        <strong>{{ total_consultas }}</strong>
+        <small>Agendamentos de consulta</small>
+    </div>
+
+    <div class="paciente-indicador">
+        <span>Exames</span>
+        <strong>{{ total_exames }}</strong>
+        <small>Exames agendados</small>
+    </div>
+
+    <div class="paciente-indicador">
+        <span>Prontuários</span>
+        <strong>{{ total_prontuarios }}</strong>
+        <small>Registros médicos</small>
+    </div>
+
+    <div class="paciente-indicador">
+        <span>Alergias</span>
+        <strong>{{ total_alergias }}</strong>
+        <small>Registros identificados</small>
+    </div>
+
+</section>
+
+<!-- ALERGIAS -->
+<section class="paciente-card">
+
+    <div class="paciente-section-head">
+        <div>
+            <h2>Alergias</h2>
+            <p>Informações importantes para o atendimento</p>
+        </div>
+    </div>
+
+    {% if alergias %}
+        <div class="alergias-lista">
+
+            {% for alergia in alergias %}
+                <div class="alergia-item">
+
+                    <div class="alergia-info">
+                        <span class="alergia-icone">!</span>
+                        <strong>{{ alergia.descricao }}</strong>
+                    </div>
+
+                    {% if pode_criar_alergia %}
+                        <form
+                            method="POST"
+                            action="{% url 'excluir_alergia' paciente.cpf alergia.id_alergias %}"
+                            onsubmit="return confirm('Deseja remover esta alergia?');"
+                        >
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                Remover
+                            </button>
+                        </form>
+                    {% endif %}
+
+                </div>
+            {% endfor %}
+
+        </div>
+    {% else %}
+        <p class="paciente-vazio">
+            Nenhuma alergia cadastrada para este paciente.
+        </p>
+    {% endif %}
+
+    {% if pode_criar_alergia %}
+        <form
+            method="POST"
+            action="{% url 'adicionar_alergia' paciente.cpf %}"
+            class="alergia-form"
+        >
+            {% csrf_token %}
+
+            <div class="form-field">
+                <label for="descricao_alergia">Adicionar alergia</label>
+
+                <input
+                    type="text"
+                    name="descricao"
+                    id="descricao_alergia"
+                    maxlength="300"
+                    placeholder="Ex.: Dipirona, amoxicilina, lactose..."
+                    required
+                >
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                Adicionar alergia
+            </button>
+        </form>
+    {% endif %}
+
+</section>
+
+<!-- CONSULTAS E EXAMES -->
+<section class="paciente-card">
+
+    <div class="paciente-section-head">
+        <div>
+            <h2>Consultas e exames</h2>
+            <p>Histórico de agendamentos do paciente</p>
+        </div>
+    </div>
+
+    {% if agendamentos %}
+        <div class="paciente-tabela-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Data e horário</th>
+                        <th>Médico</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for agendamento in agendamentos %}
+                        <tr>
+                            <td>{{ agendamento.tipo }}</td>
+
+                            <td>
+                                {{ agendamento.data_hora|date:"d/m/Y H:i" }}
+                            </td>
+
+                            <td>{{ agendamento.medico.nome }}</td>
+
+                            <td>
+                                <span class="paciente-status">
+                                    {{ agendamento.status.descricao }}
+                                </span>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="paciente-vazio">
+            Nenhum agendamento encontrado.
+        </p>
+    {% endif %}
+
+</section>
+
+<!-- PRONTUÁRIOS -->
+<section class="paciente-card">
+
+    <div class="paciente-section-head">
+        <div>
+            <h2>Histórico médico</h2>
+            <p>Prontuários e registros clínicos</p>
+        </div>
+    </div>
+
+    {% if prontuarios %}
+        <div class="prontuarios-lista">
+
+            {% for prontuario in prontuarios %}
+                <article class="prontuario-item">
+
+                    <div class="prontuario-topo">
+                        <strong>Prontuário #{{ prontuario.id_prontuario }}</strong>
+                        <span>{{ prontuario.medico.nome }}</span>
+                    </div>
+
+                    <div class="prontuario-conteudo">
+
+                        <div>
+                            <h3>Anamnese</h3>
+                            <p>{{ prontuario.anamnese|default:"Não informado"|linebreaksbr }}</p>
+                        </div>
+
+                        <div>
+                            <h3>Diagnóstico</h3>
+                            <p>{{ prontuario.diagnostico|default:"Não informado"|linebreaksbr }}</p>
+                        </div>
+
+                        <div>
+                            <h3>Prescrição</h3>
+                            <p>{{ prontuario.prescricao|default:"Não informado"|linebreaksbr }}</p>
+                        </div>
+
+                    </div>
+
+                </article>
+            {% endfor %}
+
+        </div>
+    {% else %}
+        <p class="paciente-vazio">
+            Nenhum prontuário registrado.
+        </p>
+    {% endif %}
+
+</section>
+
+<!-- FINANCEIRO -->
+{% if pode_ver_financeiro %}
+
+<section class="paciente-card">
+
+    <div class="paciente-section-head">
+        <div>
+            <h2>Financeiro</h2>
+            <p>Pagamentos vinculados aos atendimentos</p>
+        </div>
+    </div>
+
+    {% if pagamentos %}
+        <div class="paciente-tabela-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Descrição</th>
+                        <th>Valor</th>
+                        <th>Forma de pagamento</th>
+                        <th>Data</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for pagamento in pagamentos %}
+                        <tr>
+                            <td>{{ pagamento.descricao }}</td>
+
+                            <td>
+                                R$ {{ pagamento.valor|floatformat:2 }}
+                            </td>
+
+                            <td>{{ pagamento.forma_pagamento }}</td>
+
+                            <td>
+                                {{ pagamento.data_pagamento|date:"d/m/Y" }}
+                            </td>
+
+                            <td>
+                                {{ pagamento.status_pagamento.descricao }}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="paciente-vazio">
+            Nenhum pagamento encontrado.
+        </p>
+    {% endif %}
+
+</section>
+
+{% endif %}
+
+{% endblock %}

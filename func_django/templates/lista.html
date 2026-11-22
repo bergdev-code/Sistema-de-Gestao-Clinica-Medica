@@ -26,15 +26,27 @@
             <thead>
                 <tr>
                     {% for c in colunas %}<th>{{ c }}</th>{% endfor %}
-                    {% if pode_excluir or pode_aceitar %}<th class="col-acoes">Ações</th>{% endif %}
+                    {% if pode_excluir or pode_aceitar or recurso == "pacientes" %}
+                        <th class="col-acoes">Ações</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for linha in linhas %}
                 <tr>
                     {% for valor in linha.valores %}<td>{{ valor|default:"—" }}</td>{% endfor %}
-                    {% if pode_excluir or pode_aceitar %}
-                    <td class="col-acoes">
+                    {% if pode_excluir or pode_aceitar or recurso == "pacientes" %}
+<td class="col-acoes">
+    <div class="acoes-linha">
+
+        {% if recurso == "pacientes" %}
+            <a
+                href="{% url 'detalhe_paciente' linha.pk %}"
+                class="btn btn-primary btn-sm"
+            >
+                Ver detalhes
+            </a>
+        {% endif %}
                         <div class="acoes-linha">
                             {% if linha.pendente and pode_aceitar %}
                             <a class="btn btn-success btn-sm" href="{% url 'aceitar_consulta' linha.pk %}">Aceitar</a>

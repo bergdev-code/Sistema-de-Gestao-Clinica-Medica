@@ -42,4 +42,22 @@ urlpatterns = [
     path("<slug:recurso>/", views.lista, name="lista"),
     path("<slug:recurso>/novo/", views.novo, name="novo"),
     path("<slug:recurso>/<str:pk>/excluir/", views.excluir, name="excluir"),
+path(
+    "pacientes/<str:cpf>/",
+    views.detalhe_paciente,
+    name="detalhe_paciente"
+),
+
+path(
+    "pacientes/<str:cpf>/alergias/adicionar/",
+    views.adicionar_alergia,
+    name="adicionar_alergia"
+),
+
+path(
+    "pacientes/<str:cpf>/alergias/<int:pk>/excluir/",
+    views.excluir_alergia,
+    name="excluir_alergia"
+),
+
 ]

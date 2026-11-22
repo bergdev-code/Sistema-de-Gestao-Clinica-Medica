@@ -487,3 +487,355 @@ html[data-theme="dark"] .badge-off {
 html[data-theme="dark"] {
     color-scheme: dark;
 }
+
+
+/* =========================================
+   AMBIENTE DE PACIENTES
+========================================= */
+
+.paciente-head {
+    align-items: center;
+}
+
+.paciente-head p {
+    color: #64748b;
+    margin-top: 5px;
+    font-size: 14px;
+}
+
+.paciente-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .03);
+}
+
+.paciente-identificacao {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+}
+
+.paciente-avatar {
+    width: 76px;
+    height: 76px;
+    min-width: 76px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #e0e7ff;
+    color: #3730a3;
+    font-size: 30px;
+    font-weight: 700;
+}
+
+.paciente-identificacao-info h2 {
+    font-size: 21px;
+    margin-bottom: 12px;
+    color: #1e293b;
+}
+
+.paciente-identificacao-info p {
+    font-size: 14px;
+    color: #64748b;
+    margin: 6px 0;
+}
+
+.paciente-indicadores {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
+.paciente-indicador {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.paciente-indicador span {
+    font-size: 14px;
+    color: #64748b;
+}
+
+.paciente-indicador strong {
+    font-size: 27px;
+    color: #1e293b;
+}
+
+.paciente-indicador small {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.paciente-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.paciente-section-head h2 {
+    font-size: 18px;
+    color: #1e293b;
+    margin-bottom: 5px;
+}
+
+.paciente-section-head p {
+    font-size: 13px;
+    color: #64748b;
+}
+
+.paciente-vazio {
+    color: #94a3b8;
+    font-size: 14px;
+    padding: 15px 0;
+}
+
+.alergias-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.alergia-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    padding: 13px 15px;
+    border: 1px solid #fecaca;
+    border-radius: 9px;
+    background: #fff7f7;
+}
+
+.alergia-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #991b1b;
+    font-size: 14px;
+}
+
+.alergia-icone {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    background: #fee2e2;
+    font-weight: 700;
+}
+
+.alergia-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 20px;
+}
+
+.alergia-form .form-field {
+    flex: 1;
+}
+
+.alergia-form input {
+    width: 100%;
+}
+
+.paciente-tabela-scroll {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.paciente-tabela-scroll table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 580px;
+}
+
+.paciente-tabela-scroll th,
+.paciente-tabela-scroll td {
+    padding: 14px 12px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 13px;
+}
+
+.paciente-tabela-scroll th {
+    color: #64748b;
+    font-weight: 600;
+    background: #f8fafc;
+}
+
+.paciente-status {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 20px;
+    background: #e0e7ff;
+    color: #3730a3;
+    font-size: 12px;
+}
+
+.prontuarios-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.prontuario-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 18px;
+}
+
+.prontuario-topo {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.prontuario-topo strong {
+    color: #1e293b;
+}
+
+.prontuario-topo span {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.prontuario-conteudo {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+    padding-top: 16px;
+}
+
+.prontuario-conteudo h3 {
+    font-size: 13px;
+    margin-bottom: 8px;
+    color: #475569;
+}
+
+.prontuario-conteudo p {
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+/* MODO ESCURO */
+
+html[data-theme="dark"] .paciente-card,
+html[data-theme="dark"] .paciente-indicador {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .paciente-identificacao-info h2,
+html[data-theme="dark"] .paciente-indicador strong,
+html[data-theme="dark"] .paciente-section-head h2,
+html[data-theme="dark"] .prontuario-topo strong {
+    color: #f1f5f9;
+}
+
+html[data-theme="dark"] .paciente-identificacao-info p,
+html[data-theme="dark"] .paciente-indicador span,
+html[data-theme="dark"] .paciente-indicador small,
+html[data-theme="dark"] .paciente-section-head p,
+html[data-theme="dark"] .paciente-vazio,
+html[data-theme="dark"] .prontuario-topo span,
+html[data-theme="dark"] .prontuario-conteudo h3,
+html[data-theme="dark"] .prontuario-conteudo p {
+    color: #cbd5e1;
+}
+
+html[data-theme="dark"] .paciente-avatar {
+    background: #312e81;
+    color: #c7d2fe;
+}
+
+html[data-theme="dark"] .alergia-item {
+    background: #451a1a;
+    border-color: #7f1d1d;
+}
+
+html[data-theme="dark"] .alergia-info {
+    color: #fecaca;
+}
+
+html[data-theme="dark"] .alergia-icone {
+    background: #7f1d1d;
+}
+
+html[data-theme="dark"] .paciente-tabela-scroll th {
+    background: #0f172a;
+    color: #cbd5e1;
+}
+
+html[data-theme="dark"] .paciente-tabela-scroll th,
+html[data-theme="dark"] .paciente-tabela-scroll td,
+html[data-theme="dark"] .prontuario-item,
+html[data-theme="dark"] .prontuario-topo {
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .paciente-status {
+    background: #312e81;
+    color: #c7d2fe;
+}
+
+html[data-theme="dark"] .alergia-form {
+    border-color: #334155;
+}
+
+/* RESPONSIVIDADE */
+
+@media (max-width: 900px) {
+    .paciente-indicadores {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .prontuario-conteudo {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 600px) {
+    .paciente-identificacao {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .paciente-indicadores {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .paciente-card {
+        padding: 17px;
+    }
+
+    .alergia-form {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .alergia-form button {
+        width: 100%;
+    }
+}

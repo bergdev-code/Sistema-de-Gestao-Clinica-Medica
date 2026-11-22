@@ -29,6 +29,26 @@ class func_django(models.Model):
     class Meta:
         db_table = 'pacientes'
         managed = True
+        
+class Alergia(models.Model):
+
+    id_alergias = models.AutoField(primary_key=True)
+
+    paciente = models.ForeignKey(
+        func_django,
+        on_delete=models.PROTECT,
+        db_column='paciente_id',
+        related_name='alergias'
+    )
+
+    descricao = models.CharField(max_length=300)
+
+    class Meta:
+        db_table = 'alergias'
+        managed = False
+
+    def __str__(self):
+        return self.descricao
     
 class Perfil(models.Model):
 
