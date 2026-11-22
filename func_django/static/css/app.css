@@ -1,6 +1,6 @@
 /* Complementa dashboard.css (topbar, botão Sair, tipografia, cores) */
 
-.app-shell { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 66px); }
+.app-shell { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 66px); position: relative; transition: grid-template-columns .25s ease; }
 
 .sidebar { background: #fff; border-right: 1px solid #e2e8f0; padding: 24px 14px; display: flex; flex-direction: column; gap: 4px; }
 .sidebar a { padding: 11px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; color: #475569; text-decoration: none; }
@@ -57,9 +57,10 @@ tr:last-child td { border-bottom: none; }
 .alert-info { background: #dbeafe; color: #1e40af; }
 
 @media (max-width: 800px) {
-    .app-shell { grid-template-columns: 1fr; }
-    .sidebar { flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid #e2e8f0; padding: 12px; }
-    .sidebar a { white-space: nowrap; }
+    .app-shell, .app-shell.menu-fechado { grid-template-columns: 1fr; }
+    .sidebar { position: absolute; top: 0; bottom: 0; left: 0; width: 250px; z-index: 20; box-shadow: 4px 0 24px rgba(15, 23, 42, .15); transition: transform .25s ease; }
+    .menu-fechado .sidebar { transform: translateX(-100%); }
+    .app-shell:not(.menu-fechado) .menu-fundo { display: block; }
     .page-head { flex-direction: column; align-items: flex-start; }
 }
 
@@ -89,3 +90,14 @@ tr:last-child td { border-bottom: none; }
 .btn-success:hover { background: #15803d; }
 
 .field-hint { display: block; margin-top: 6px; font-size: 12px; color: #64748b; }
+
+/* Menu lateral recolhível (botão de três traços) */
+.brand-area { display: flex; align-items: center; gap: 14px; }
+.menu-toggle { display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: #fff; padding: 8px; border-radius: 8px; cursor: pointer; transition: .2s; }
+.menu-toggle:hover { background: rgba(255, 255, 255, .14); }
+.menu-toggle:focus-visible { outline: 3px solid rgba(191, 219, 254, .8); outline-offset: 2px; }
+
+.sidebar { min-width: 0; overflow: hidden; }
+.app-shell.menu-fechado { grid-template-columns: 0 1fr; }
+.menu-fechado .sidebar { visibility: hidden; padding-left: 0; padding-right: 0; border-right: none; }
+.menu-fundo { display: none; position: fixed; inset: 0; z-index: 15; background: rgba(15, 23, 42, .35); }

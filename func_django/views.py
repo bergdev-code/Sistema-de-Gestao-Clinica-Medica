@@ -414,6 +414,11 @@ def logout_view(request):
 
 
 @login_requerido
+def conta(request):
+    return render(request, "conta.html", {"ativo": "conta"})
+
+
+@login_requerido
 def dashboard(request):
     perfil = request.session.get("perfil")
     atalhos = []

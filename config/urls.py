@@ -23,6 +23,7 @@ urlpatterns = [
     path("", views.login_view, name="login"),
     path("sair/", views.logout_view, name="logout"),
     path("painel/", views.dashboard, name="dashboard"),
+    path("conta/", views.conta, name="conta"),
     path("consultas/solicitar/", views.solicitar_consulta, name="solicitar_consulta"),
     path("consultas/<int:pk>/aceitar/", views.aceitar_consulta, name="aceitar_consulta"),
     path("consultas/<int:pk>/recusar/", views.responder_consulta, {"acao": "recusar"}, name="recusar_consulta"),
@@ -34,4 +35,3 @@ urlpatterns = [
     path("<slug:recurso>/novo/", views.novo, name="novo"),
     path("<slug:recurso>/<str:pk>/excluir/", views.excluir, name="excluir"),
 ]
-

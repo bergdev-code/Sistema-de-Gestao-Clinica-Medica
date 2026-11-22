@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}Minha conta{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1>Minha conta</h1>
+</div>
+
+<section class="dashboard-card">
+    <h2>Informações da conta</h2>
+
+    <div class="info-item">
+        <span>Usuário:</span>
+        <strong>{{ request.session.username }}</strong>
+    </div>
+    <div class="info-item">
+        <span>E-mail:</span>
+        <strong>{{ request.session.email|default:"—" }}</strong>
+    </div>
+    <div class="info-item">
+        <span>Perfil:</span>
+        <strong>{{ request.session.perfil }}</strong>
+    </div>
+</section>
+{% endblock %}

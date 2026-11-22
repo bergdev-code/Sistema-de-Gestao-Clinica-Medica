@@ -1,132 +1,66 @@
-{% load static %}
+{% extends 'base.html' %}
+{% block title %}Painel{% endblock %}
 
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% block content %}
+<section class="welcome-section">
+    <h1>Bem-vindo, {{ request.session.username }}!</h1>
+    <p>Você está no painel do Sistema de Gestão Clínica.</p>
+</section>
 
-    <title>Painel | Sistema de Gestão Clínica</title>
+{% if consultas_hoje is not None %}
+<section class="dashboard-card" style="margin-top: 20px;">
+    <h2>Seu dia</h2>
+    <div class="info-item">
+        <span>Consultas agendadas para hoje:</span>
+        <strong>{{ consultas_hoje }}</strong>
+    </div>
+</section>
+{% endif %}
 
-    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
-    <link rel="stylesheet" href="{% static 'css/app.css' %}">
-</head>
+{% if solicitacoes_pendentes is not None %}
+<section class="dashboard-card" style="margin-top: 20px;">
+    <h2>Solicitações de consulta</h2>
+    <div class="info-item">
+        <span>Aguardando resposta:</span>
+        <strong>{{ solicitacoes_pendentes }}</strong>
+    </div>
+    <p style="margin-top: 16px;"><a class="btn btn-primary" href="{% url 'lista' 'consultas' %}">Ver consultas</a></p>
+</section>
+{% endif %}
 
-<body>
+{% if mostrar_proxima %}
+<section class="dashboard-card" style="margin-top: 20px;">
+    <h2>Sua próxima consulta</h2>
+    {% if proxima_consulta %}
+    <div class="info-item">
+        <span>Data e hora:</span>
+        <strong>{{ proxima_consulta.data_hora|date:"d/m/Y H:i" }}</strong>
+    </div>
+    <div class="info-item">
+        <span>Tipo:</span>
+        <strong>{{ proxima_consulta.tipo }}</strong>
+    </div>
+    <div class="info-item">
+        <span>Médico:</span>
+        <strong>{{ proxima_consulta.medico.nome }}</strong>
+    </div>
+    {% else %}
+    <div class="info-item"><span>Você não tem consultas agendadas.</span></div>
+    {% endif %}
+    <p style="margin-top: 16px;"><a class="btn btn-primary" href="{% url 'solicitar_consulta' %}">Solicitar consulta ou exame</a></p>
+</section>
+{% endif %}
 
-    <header class="topbar">
-
-        <div class="brand">
-            <h2>Sistema de Gestão Clínica</h2>
-        </div>
-
-        <div class="user-info">
-            <div class="user-details">
-                <strong>{{ request.session.username }}</strong>
-                <span>{{ request.session.perfil }}</span>
-            </div>
-
-            <form method="POST" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button type="submit" class="logout-button">
-                    Sair
-                </button>
-            </form>
-        </div>
-
-    </header>
-
-    <main class="dashboard-container">
-
-        <section class="welcome-section">
-
-            <h1>Bem-vindo, {{ request.session.username }}!</h1>
-
-            <p>
-                Você está no painel do Sistema de Gestão Clínica.
-            </p>
-
-        </section>
-
-        <section class="dashboard-card">
-
-            <h2>Informações da conta</h2>
-
-            <div class="info-item">
-                <span>Usuário:</span>
-                <strong>{{ request.session.username }}</strong>
-            </div>
-
-            <div class="info-item">
-                <span>E-mail:</span>
-                <strong>{{ request.session.email }}</strong>
-            </div>
-
-            <div class="info-item">
-                <span>Perfil:</span>
-                <strong>{{ request.session.perfil }}</strong>
-            </div>
-
-        </section>
-
-        {% if consultas_hoje is not None %}
-        <section class="dashboard-card" style="margin-top: 20px;">
-            <h2>Seu dia</h2>
-            <div class="info-item">
-                <span>Consultas agendadas para hoje:</span>
-                <strong>{{ consultas_hoje }}</strong>
-            </div>
-        </section>
-        {% endif %}
-
-        {% if solicitacoes_pendentes is not None %}
-        <section class="dashboard-card" style="margin-top: 20px;">
-            <h2>Solicitações de consulta</h2>
-            <div class="info-item">
-                <span>Aguardando resposta:</span>
-                <strong>{{ solicitacoes_pendentes }}</strong>
-            </div>
-            <p style="margin-top: 16px;"><a class="btn btn-primary" href="{% url 'lista' 'consultas' %}">Ver consultas</a></p>
-        </section>
-        {% endif %}
-
-        {% if mostrar_proxima %}
-        <section class="dashboard-card" style="margin-top: 20px;">
-            <h2>Sua próxima consulta</h2>
-            {% if proxima_consulta %}
-            <div class="info-item">
-                <span>Data e hora:</span>
-                <strong>{{ proxima_consulta.data_hora|date:"d/m/Y H:i" }}</strong>
-            </div>
-            <div class="info-item">
-                <span>Tipo:</span>
-                <strong>{{ proxima_consulta.tipo }}</strong>
-            </div>
-            <div class="info-item">
-                <span>Médico:</span>
-                <strong>{{ proxima_consulta.medico.nome }}</strong>
-            </div>
-            {% else %}
-            <div class="info-item"><span>Você não tem consultas agendadas.</span></div>
-            {% endif %}
-            <p style="margin-top: 16px;"><a class="btn btn-primary" href="{% url 'solicitar_consulta' %}">Solicitar consulta ou exame</a></p>
-        </section>
-        {% endif %}
-
-        {% if atalhos %}
-        <section class="atalhos" aria-label="Acesso rápido">
-            {% for a in atalhos %}
-            <a class="atalho" href="{{ a.url }}">{{ a.titulo }}</a>
-            {% endfor %}
-        </section>
-        {% else %}
-        <div class="alert alert-warning" style="margin-top: 20px;">
-            Nenhuma tela está liberada para o perfil "{{ request.session.perfil }}".
-            Peça ao administrador para conferir o nome do perfil.
-        </div>
-        {% endif %}
-
-    </main>
-
-</body>
-</html>
+{% if atalhos %}
+<section class="atalhos" aria-label="Acesso rápido">
+    {% for a in atalhos %}
+    <a class="atalho" href="{{ a.url }}">{{ a.titulo }}</a>
+    {% endfor %}
+</section>
+{% else %}
+<div class="alert alert-warning" style="margin-top: 20px;">
+    Nenhuma tela está liberada para o perfil "{{ request.session.perfil }}".
+    Peça ao administrador para conferir o nome do perfil.
+</div>
+{% endif %}
+{% endblock %}
