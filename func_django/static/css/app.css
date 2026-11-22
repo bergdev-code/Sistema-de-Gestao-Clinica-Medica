@@ -101,3 +101,389 @@ tr:last-child td { border-bottom: none; }
 .app-shell.menu-fechado { grid-template-columns: 0 1fr; }
 .menu-fechado .sidebar { visibility: hidden; padding-left: 0; padding-right: 0; border-right: none; }
 .menu-fundo { display: none; position: fixed; inset: 0; z-index: 15; background: rgba(15, 23, 42, .35); }
+
+
+/* =========================================
+   MODO ESCURO
+========================================= */
+
+/* Botão de alternância */
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid rgba(255, 255, 255, .25);
+    border-radius: 8px;
+    background: transparent;
+    color: #fff;
+    font-size: 19px;
+    cursor: pointer;
+    transition: .2s;
+}
+
+.theme-toggle:hover {
+    background: rgba(255, 255, 255, .14);
+}
+
+.theme-toggle:focus-visible {
+    outline: 3px solid rgba(191, 219, 254, .8);
+    outline-offset: 2px;
+}
+
+/* Tema escuro */
+html[data-theme="dark"] body {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+/* Menu lateral */
+html[data-theme="dark"] .sidebar {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .sidebar a {
+    color: #cbd5e1;
+}
+
+html[data-theme="dark"] .sidebar a:hover {
+    background: #334155;
+}
+
+html[data-theme="dark"] .sidebar a.active {
+    background: #1e3a5f;
+    color: #93c5fd;
+}
+
+/* Área principal */
+html[data-theme="dark"] .content {
+    color: #e2e8f0;
+}
+
+html[data-theme="dark"] .page-head h1,
+html[data-theme="dark"] .welcome-section h1 {
+    color: #f1f5f9;
+}
+
+html[data-theme="dark"] .welcome-section p {
+    color: #cbd5e1;
+}
+
+/* Cards */
+html[data-theme="dark"] .dashboard-card,
+html[data-theme="dark"] .table-card,
+html[data-theme="dark"] .form-card,
+html[data-theme="dark"] .resumo-card,
+html[data-theme="dark"] .atalho {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .dashboard-card h2,
+html[data-theme="dark"] .resumo-card strong,
+html[data-theme="dark"] .atalho {
+    color: #f1f5f9;
+}
+
+html[data-theme="dark"] .info-item,
+html[data-theme="dark"] .info-item span {
+    color: #cbd5e1;
+}
+
+/* Tabelas */
+html[data-theme="dark"] table {
+    color: #e2e8f0;
+}
+
+html[data-theme="dark"] th {
+    background: #334155;
+    color: #cbd5e1;
+    border-color: #475569;
+}
+
+html[data-theme="dark"] td {
+    border-color: #334155;
+}
+
+html[data-theme="dark"] tr:hover {
+    background: #273449;
+}
+
+/* Formulários */
+html[data-theme="dark"] .form-field label {
+    color: #e2e8f0;
+}
+
+html[data-theme="dark"] .form-field input:not([type=checkbox]),
+html[data-theme="dark"] .form-field select,
+html[data-theme="dark"] .form-field textarea,
+html[data-theme="dark"] .search-bar input {
+    background: #0f172a;
+    color: #f1f5f9;
+    border-color: #475569;
+}
+
+html[data-theme="dark"] .form-field input::placeholder,
+html[data-theme="dark"] .form-field textarea::placeholder,
+html[data-theme="dark"] .search-bar input::placeholder {
+    color: #94a3b8;
+}
+
+html[data-theme="dark"] .form-field select option {
+    background: #1e293b;
+    color: #f1f5f9;
+}
+
+html[data-theme="dark"] .field-hint,
+html[data-theme="dark"] .empty {
+    color: #94a3b8;
+}
+
+/* Botões secundários */
+html[data-theme="dark"] .btn-secondary {
+    background: #334155;
+    color: #e2e8f0;
+}
+
+html[data-theme="dark"] .btn-secondary:hover {
+    background: #475569;
+}
+
+/* Alertas */
+html[data-theme="dark"] .alert-error {
+    background: #451a1a;
+    color: #fecaca;
+}
+
+html[data-theme="dark"] .alert-success {
+    background: #143d2a;
+    color: #bbf7d0;
+}
+
+html[data-theme="dark"] .alert-warning {
+    background: #422006;
+    color: #fde68a;
+}
+
+html[data-theme="dark"] .alert-info {
+    background: #172554;
+    color: #bfdbfe;
+}
+
+/* Badges */
+html[data-theme="dark"] .badge-ok {
+    background: #14532d;
+    color: #bbf7d0;
+}
+
+html[data-theme="dark"] .badge-warn {
+    background: #713f12;
+    color: #fde68a;
+}
+
+html[data-theme="dark"] .badge-off {
+    background: #334155;
+    color: #cbd5e1;
+}
+
+/* Links */
+html[data-theme="dark"] .content a:not(.btn):not(.atalho) {
+    color: #93c5fd;
+}
+
+/* Seleção de texto */
+html[data-theme="dark"] ::selection {
+    background: #1d4ed8;
+    color: #fff;
+}
+
+
+/* =========================================
+   BOTÃO DE ALTERNÂNCIA DE TEMA
+========================================= */
+
+.theme-toggle {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.25);
+    border-radius: 10px;
+    background: transparent;
+    color: white;
+    font-size: 23px;
+    cursor: pointer;
+    transition: .2s;
+}
+
+.theme-toggle:hover {
+    background: rgba(255,255,255,.14);
+}
+
+.theme-toggle:focus-visible {
+    outline: 3px solid #bfdbfe;
+    outline-offset: 3px;
+}
+
+/* =========================================
+   MODO ESCURO GLOBAL
+========================================= */
+
+html[data-theme="dark"] body {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+html[data-theme="dark"] .topbar {
+    background: #090f1d;
+    border-bottom: 1px solid #263449;
+}
+
+html[data-theme="dark"] .sidebar {
+    background: #172235;
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .sidebar a {
+    color: #cbd5e1;
+}
+
+html[data-theme="dark"] .sidebar a:hover {
+    background: #26364d;
+}
+
+html[data-theme="dark"] .sidebar a.active {
+    background: #1e3a5f;
+    color: #93c5fd;
+}
+
+html[data-theme="dark"] .content {
+    background: #0f172a;
+}
+
+html[data-theme="dark"] .welcome-section h1,
+html[data-theme="dark"] .page-head h1,
+html[data-theme="dark"] .dashboard-card h2,
+html[data-theme="dark"] .resumo-card strong {
+    color: #f1f5f9;
+}
+
+html[data-theme="dark"] .welcome-section p,
+html[data-theme="dark"] .field-hint,
+html[data-theme="dark"] .empty {
+    color: #94a3b8;
+}
+
+/* Cards */
+
+html[data-theme="dark"] .dashboard-card,
+html[data-theme="dark"] .table-card,
+html[data-theme="dark"] .form-card,
+html[data-theme="dark"] .resumo-card,
+html[data-theme="dark"] .atalho {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-color: #334155;
+    box-shadow: 0 5px 20px rgba(0,0,0,.15);
+}
+
+html[data-theme="dark"] .atalho {
+    color: #e2e8f0;
+}
+
+html[data-theme="dark"] .atalho:hover {
+    border-color: #60a5fa;
+}
+
+/* Textos e informações */
+
+html[data-theme="dark"] .info-item {
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .info-item span,
+html[data-theme="dark"] .resumo-card span {
+    color: #94a3b8;
+}
+
+html[data-theme="dark"] .info-item strong {
+    color: #f1f5f9;
+}
+
+/* Tabelas */
+
+html[data-theme="dark"] th {
+    background: #172235;
+    color: #cbd5e1;
+}
+
+html[data-theme="dark"] td {
+    color: #e2e8f0;
+    border-color: #334155;
+}
+
+html[data-theme="dark"] tr:hover td {
+    background: #263449;
+}
+
+/* Formulários */
+
+html[data-theme="dark"] .form-field label {
+    color: #cbd5e1;
+}
+
+html[data-theme="dark"] .form-field input:not([type=checkbox]),
+html[data-theme="dark"] .form-field select,
+html[data-theme="dark"] .form-field textarea,
+html[data-theme="dark"] .search-bar input {
+    background: #0f172a;
+    color: #f1f5f9;
+    border-color: #475569;
+}
+
+html[data-theme="dark"] .form-field input::placeholder,
+html[data-theme="dark"] .form-field textarea::placeholder,
+html[data-theme="dark"] .search-bar input::placeholder {
+    color: #94a3b8;
+}
+
+html[data-theme="dark"] .form-field select option {
+    background: #1e293b;
+    color: #f1f5f9;
+}
+
+html[data-theme="dark"] .form-field input:focus,
+html[data-theme="dark"] .form-field select:focus,
+html[data-theme="dark"] .form-field textarea:focus,
+html[data-theme="dark"] .search-bar input:focus {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(96,165,250,.15);
+}
+
+/* Botões secundários */
+
+html[data-theme="dark"] .btn-secondary {
+    background: #334155;
+    color: #e2e8f0;
+}
+
+html[data-theme="dark"] .btn-secondary:hover {
+    background: #475569;
+}
+
+/* Etiquetas */
+
+html[data-theme="dark"] .badge-off {
+    background: #334155;
+    color: #cbd5e1;
+}
+
+/* Barra de rolagem */
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+}

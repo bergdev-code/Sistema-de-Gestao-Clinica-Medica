@@ -984,3 +984,148 @@ def aceitar_consulta(request, pk):
         "titulo": f"Aceitar {ag.tipo.lower()} de {ag.paciente.nome or ag.paciente.cpf} em {dia:%d/%m/%Y}",
         "botao": "Confirmar consulta", "voltar": reverse("lista", args=["consultas"]),
     })
+    
+
+def cadastro_publico(request):
+    import hashlib
+    import secrets
+    from datetime import date
+
+    from django.contrib import messages
+    from django.db import transaction, IntegrityError
+    from django.shortcuts import render, redirect
+
+    from sistema_clinica.funcionalidades.regex import (
+        validar_nome,
+        validar_email,
+        validar_senha,
+    )
+
+    from func_django.models import Usuario, Perfil, func_django
+
+    if request.method == "GET":
+        return render(request, "cadastro.html")
+
+    username = request.POST.get("username", "").strip()
+    email = request.POST.get("email", "").strip().lower()
+    senha = request.POST.get("senha", "")
+    confirmar_senha = request.POST.get("confirmar_senha", "")
+
+    cpf = "".join(filter(str.isdigit, request.POST.get("cpf", "")))
+    nome = request.POST.get("nome", "").strip()
+    telefone = "".join(filter(str.isdigit, request.POST.get("telefone", "")))
+    nascimento = request.POST.get("data_nascimento", "").strip()
+
+    dados = {
+        "username": username,
+        "email": email,
+        "cpf": cpf,
+        "nome": nome,
+        "telefone": telefone,
+        "data_nascimento": nascimento,
+    }
+
+    def retornar_erro(texto):
+        messages.error(request, texto)
+        return render(request, "cadastro.html", {"dados": dados})
+
+    # Username
+    if not validar_nome(username):
+        return retornar_erro("Nome de usuário inválido!")
+
+    if len(username) > 10:
+        return retornar_erro("O usuário deve possuir no máximo 10 caracteres!")
+
+    if Usuario.objects.filter(username__iexact=username).exists():
+        return retornar_erro("Nome de usuário já cadastrado!")
+
+    # E-mail
+    if not validar_email(email):
+        return retornar_erro("E-mail inválido!")
+
+    if len(email) > 50:
+        return retornar_erro("O e-mail deve possuir no máximo 50 caracteres!")
+
+    if Usuario.objects.filter(email__iexact=email).exists():
+        return retornar_erro("E-mail já cadastrado!")
+
+    # Senha
+    if not validar_senha(senha):
+        return retornar_erro("Senha inválida! Verifique os requisitos mínimos.")
+
+    if senha != confirmar_senha:
+        return retornar_erro("As senhas não coincidem!")
+
+    # Dados do paciente
+    if len(cpf) != 11:
+        return retornar_erro("Informe um CPF com 11 números!")
+
+    if not validar_nome(nome):
+        return retornar_erro("Nome completo inválido!")
+
+    if len(telefone) not in (10, 11):
+        return retornar_erro("Informe um telefone válido com DDD!")
+
+    if func_django.objects.filter(cpf=cpf).exists():
+        return retornar_erro("Este CPF já está cadastrado!")
+
+    try:
+        data_nascimento = date.fromisoformat(nascimento)
+    except ValueError:
+        return retornar_erro("Data de nascimento inválida!")
+
+    if data_nascimento >= date.today():
+        return retornar_erro("A data de nascimento deve ser anterior à data atual!")
+
+    # Perfil fixo para cadastros públicos
+    perfil = Perfil.objects.filter(nome_perfil__iexact="Paciente").first()
+
+    if not perfil:
+        return retornar_erro("Perfil Paciente não encontrado no banco de dados!")
+
+    # Hash da senha
+    salt = secrets.token_bytes(16)
+
+    senha_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        senha.encode("utf-8"),
+        salt,
+        600000
+    ).hex()
+
+    try:
+        with transaction.atomic():
+
+            paciente = func_django.objects.create(
+                cpf=cpf,
+                nome=nome,
+                telefone=telefone,
+                data_nascimento=data_nascimento,
+            )
+
+            Usuario.objects.create(
+                username=username,
+                email=email,
+                senha_hash=senha_hash,
+                salt=salt.hex(),
+                id_perfil=perfil,
+                paciente=paciente,
+                medico=None,
+            )
+
+    except IntegrityError:
+        return retornar_erro(
+            "Não foi possível cadastrar. Verifique se os dados já existem."
+        )
+
+    except Exception:
+        return retornar_erro(
+            "Ocorreu um erro ao criar sua conta. Tente novamente."
+        )
+
+    messages.success(
+        request,
+        "Conta criada com sucesso! Agora você pode entrar."
+    )
+
+    return redirect("login")

@@ -1,0 +1,25 @@
+.register-shell { min-height: 760px; }
+.register-visual { min-height: 760px; }
+.register-panel { padding-top: 82px; padding-bottom: 64px; }
+.register-wrap { max-width: 470px; }
+.register-wrap .form-heading { margin-bottom: 24px; }
+.register-wrap .form-heading h2 { font-size: 29px; }
+.register-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.register-grid .field { min-width: 0; margin-bottom: 15px; }
+.register-grid .field input { height: 46px; font-size: 12px; }
+.register-grid .field label { font-size: 11px; margin-bottom: 7px; }
+.register-grid .password-field input { padding-right: 70px; }
+.register-grid .password-toggle { right: 10px; font-size: 10px; }
+.profile-note { display: flex; align-items: center; gap: 8px; margin: 2px 0 18px; color: var(--muted); font-size: 11px; }
+.profile-note span { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: rgba(22,163,74,.12); color: #16a34a; font-weight: 800; }
+.register-panel .signup-prompt { margin-top: 20px; }
+@media (max-width: 850px) {
+    .register-shell { min-height: 0; }
+    .register-visual { display: none; }
+    .register-panel { min-height: 760px; padding: 82px 45px 65px; }
+}
+@media (max-width: 520px) {
+    .register-panel { min-height: 100vh; padding: 78px 22px 65px; }
+    .register-grid { grid-template-columns: 1fr; gap: 0; }
+    .register-grid .field { margin-bottom: 16px; }
+}

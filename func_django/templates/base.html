@@ -1,6 +1,18 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="pt-br">
+
+    <script>
+    (function () {
+        try {
+            const tema = localStorage.getItem("temaClinica") || "light";
+            document.documentElement.setAttribute("data-theme", tema);
+        } catch (e) {
+            document.documentElement.setAttribute("data-theme", "light");
+        }
+    })();
+</script>
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -31,31 +43,98 @@
             .app-shell:not(.menu-fechado) .menu-fundo { display: block; }
         }
     </style>
+
+    <script>
+        (function () {
+           try {
+             const tema = localStorage.getItem("temaSite") || "light";
+              document.documentElement.setAttribute("data-theme", tema);
+           } catch (e) {
+               document.documentElement.setAttribute("data-theme", "light");
+            }
+        })();
+    </script>
+
 </head>
 <body>
 
-    <header class="topbar">
-        <div class="brand-area">
-            <button type="button" class="menu-toggle" id="menuToggle" aria-label="Abrir ou fechar o menu" aria-expanded="true" aria-controls="menuLateral">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-                    <line x1="4" y1="6" x2="20" y2="6"></line>
-                    <line x1="4" y1="12" x2="20" y2="12"></line>
-                    <line x1="4" y1="18" x2="20" y2="18"></line>
-                </svg>
-            </button>
-            <div class="brand"><h2>Sistema de Gestão Clínica</h2></div>
+    
+<header class="topbar">
+    <div class="brand-area">
+        <button type="button" class="menu-toggle" id="menuToggle"
+                aria-label="Abrir ou fechar o menu"
+                aria-expanded="true" aria-controls="menuLateral">
+            <svg width="22" height="22" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" aria-hidden="true">
+                <line x1="4" y1="6" x2="20" y2="6"></line>
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <line x1="4" y1="18" x2="20" y2="18"></line>
+            </svg>
+        </button>
+
+        <div class="brand">
+            <h2>Sistema de Gestão Clínica</h2>
         </div>
-        <div class="user-info">
-            <a class="user-details" href="{% url 'conta' %}" title="Minha conta">
-                <strong>{{ request.session.username }}</strong>
-                <span>{{ request.session.perfil }}</span>
-            </a>
-            <form method="POST" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button type="submit" class="logout-button">Sair</button>
-            </form>
-        </div>
-    </header>
+    </div>
+
+    <div class="user-info">
+        <button type="button" id="themeToggle"
+                class="theme-toggle"
+                aria-label="Ativar modo escuro"
+                title="Alternar tema">
+            ☀️
+        </button>
+
+        <a class="user-details" href="{% url 'conta' %}" title="Minha conta">
+            <strong>{{ request.session.username }}</strong>
+            <span>{{ request.session.perfil }}</span>
+        </a>
+
+        <form method="POST" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="logout-button">Sair</button>
+        </form>
+    </div>
+</header>
+
+<script>
+(function () {
+    const botao = document.getElementById("themeToggle");
+    if (!botao) return;
+
+    function atualizarBotao(tema) {
+        const escuro = tema === "dark";
+
+        botao.textContent = escuro ? "🌙" : "☀️";
+        botao.setAttribute(
+            "aria-label",
+            escuro ? "Ativar modo claro" : "Ativar modo escuro"
+        );
+        botao.title = escuro ? "Ativar modo claro" : "Ativar modo escuro";
+    }
+
+    function aplicarTema(tema) {
+        document.documentElement.setAttribute("data-theme", tema);
+
+        try {
+            localStorage.setItem("temaClinica", tema);
+        } catch (e) {}
+
+        atualizarBotao(tema);
+    }
+
+    const temaAtual =
+        document.documentElement.getAttribute("data-theme") || "light";
+
+    atualizarBotao(temaAtual);
+
+    botao.addEventListener("click", function () {
+        const tema = document.documentElement.getAttribute("data-theme");
+        aplicarTema(tema === "dark" ? "light" : "dark");
+    });
+})();
+</script>
 
     <div class="app-shell">
         <nav class="sidebar" id="menuLateral" aria-label="Menu principal">
@@ -110,6 +189,53 @@
     })();
     </script>
 
+    <script>
+(function () {
+    const botao = document.getElementById("themeToggle");
+    const icone = document.getElementById("themeIcon");
+
+    if (!botao || !icone) return;
+
+    function aplicarTema(tema) {
+        document.documentElement.setAttribute("data-theme", tema);
+
+        const escuro = tema === "dark";
+
+        icone.textContent = escuro ? "☀️" : "🌙";
+
+        botao.setAttribute(
+            "aria-label",
+            escuro ? "Ativar modo claro" : "Ativar modo escuro"
+        );
+
+        botao.setAttribute(
+            "title",
+            escuro ? "Ativar modo claro" : "Ativar modo escuro"
+        );
+
+        botao.setAttribute("aria-pressed", String(escuro));
+    }
+
+    let temaAtual = "light";
+
+    try {
+        temaAtual = localStorage.getItem("temaSite") || "light";
+    } catch (e) {}
+
+    aplicarTema(temaAtual);
+
+    botao.addEventListener("click", function () {
+        const temaAtual = document.documentElement.getAttribute("data-theme");
+        const novoTema = temaAtual === "dark" ? "light" : "dark";
+
+        aplicarTema(novoTema);
+
+        try {
+            localStorage.setItem("temaSite", novoTema);
+        } catch (e) {}
+    });
+})();
+</script>
 
 </body>
 </html>
