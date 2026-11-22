@@ -8,8 +8,9 @@ from decimal import Decimal
 from functools import wraps
 
 from django import forms
+from django.conf import settings
 from django.contrib import messages
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.db.models import Count, ProtectedError, Q, Sum
 from django.forms import modelform_factory
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -21,8 +22,8 @@ from django.views.decorators.http import require_POST
 
 from sistema_clinica.funcionalidades.regex import validar_email, validar_nome
 from func_django.models import (
-    Agendamento, Especialidade, HorarioMedico, Medico, MedicoEspecialidade, Pagamento,
-    Prontuario, StatusPagamento, Usuario, func_django,
+    Agendamento, Especialidade, HorarioMedico, Medico, MedicoEspecialidade, Pagamento, Perfil,
+    Prontuario, StatusAgendamento, StatusPagamento, Usuario, func_django,
 )
 
 ITERACOES = 600000  # igual ao verificar_usuario.py
@@ -33,36 +34,42 @@ def gerar_hash(senha, salt_hex):
 
 
 CAMPOS_USUARIO = ["username", "email", "id_perfil", "medico"]
-if any(f.name == "paciente" for f in Usuario._meta.get_fields()):
-    CAMPOS_USUARIO.append("paciente")
+TEM_CAMPO_PACIENTE = any(f.name == "paciente" for f in Usuario._meta.get_fields())
 
 
 class UsuarioForm(forms.ModelForm):
-    """Mesmas regras do cadastro_usuarios.py do terminal."""
+    """Mesmas regras do cadastro_usuarios.py do terminal. Com o perfil Paciente,
+    cadastra também o paciente (CPF, nome...) na mesma tela."""
 
     senha = forms.CharField(widget=forms.PasswordInput, min_length=8, label="Senha (mínimo 8 caracteres)")
+    cpf = forms.CharField(required=False, max_length=11, label="CPF do paciente")
+    nome = forms.CharField(required=False, max_length=150, label="Nome do paciente")
+    telefone = forms.CharField(required=False, max_length=11, label="Telefone do paciente")
+    data_nascimento = forms.DateField(
+        required=False, label="Data de nascimento do paciente",
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+    )
 
     class Meta:
         model = Usuario
         fields = CAMPOS_USUARIO
         labels = {"username": "Nome de usuário", "id_perfil": "Perfil",
-                  "medico": "Médico (obrigatório para o perfil Médico)",
-                  "paciente": "Paciente (obrigatório para o perfil Paciente)"}
+                  "medico": "Médico (obrigatório para o perfil Médico)"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._novo_paciente = None
         # só médicos ativos que ainda não têm usuário
         self.fields["medico"].queryset = (
             Medico.objects.filter(ativo=True).order_by("nome")
             .exclude(crm__in=Usuario.objects.filter(medico__isnull=False).values_list("medico_id", flat=True))
         )
-        for nome_campo in ("id_perfil", "medico", "paciente"):
-            if nome_campo in self.fields:
-                self.fields[nome_campo].label_from_instance = rotulo
-        if "paciente" in self.fields:
-            self.fields["paciente"].queryset = func_django.objects.exclude(
-                cpf__in=Usuario.objects.filter(paciente__isnull=False).values_list("paciente_id", flat=True)
-            )
+        for nome_campo in ("id_perfil", "medico"):
+            self.fields[nome_campo].label_from_instance = rotulo
+        # a tela só mostra os campos que fazem sentido para o perfil escolhido
+        self.fields["medico"].widget.attrs["grupo"] = "medic"
+        for nome_campo in ("cpf", "nome", "telefone", "data_nascimento"):
+            self.fields[nome_campo].widget.attrs["grupo"] = "pacien"
 
     def clean_username(self):
         username = self.cleaned_data["username"].strip()
@@ -81,29 +88,105 @@ class UsuarioForm(forms.ModelForm):
     def clean(self):
         dados = super().clean()
         perfil = dados.get("id_perfil")
-        nome = chave_perfil(perfil.nome_perfil) if perfil else ""
+        nome_perfil = chave_perfil(perfil.nome_perfil) if perfil else ""
 
-        if nome == _n(PERFIL_MEDICO):
+        if nome_perfil == _n(PERFIL_MEDICO):
             if not dados.get("medico"):
                 self.add_error("medico", "Selecione o médico deste usuário (só aparecem médicos ativos sem usuário).")
         else:
             dados["medico"] = None
 
-        if "paciente" in self.fields:
-            if nome == _n(PERFIL_PACIENTE):
-                if not dados.get("paciente"):
-                    self.add_error("paciente", "Selecione o paciente deste usuário.")
+        if TEM_CAMPO_PACIENTE and nome_perfil == _n(PERFIL_PACIENTE):
+            cpf = (dados.get("cpf") or "").strip()
+            nome_pac = (dados.get("nome") or "").strip()
+            if not (cpf and nome_pac):
+                self.add_error("cpf", "Informe o CPF e o nome do paciente.")
+            elif func_django.objects.filter(cpf=cpf).exists():
+                self.add_error("cpf", "Já existe um paciente cadastrado com esse CPF.")
             else:
-                dados["paciente"] = None
+                self._novo_paciente = {
+                    "cpf": cpf, "nome": nome_pac,
+                    "telefone": (dados.get("telefone") or "").strip() or None,
+                    "data_nascimento": dados.get("data_nascimento"),
+                }
         return dados
 
     def save(self, commit=True):
-        usuario = super().save(commit=False)
-        usuario.salt = secrets.token_hex(16)  # igual a secrets.token_bytes(16).hex() do terminal
-        usuario.senha_hash = gerar_hash(self.cleaned_data["senha"], usuario.salt)
-        if commit:
-            usuario.save()
+        with transaction.atomic():
+            usuario = super().save(commit=False)
+            if self._novo_paciente:
+                usuario.paciente = func_django.objects.create(**self._novo_paciente)
+            usuario.salt = secrets.token_hex(16)  # igual a secrets.token_bytes(16).hex() do terminal
+            usuario.senha_hash = gerar_hash(self.cleaned_data["senha"], usuario.salt)
+            if commit:
+                usuario.save()
         return usuario
+
+
+class PacienteForm(forms.ModelForm):
+    """Cadastro de paciente. Se usuário, e-mail e senha forem preenchidos,
+    cria junto o acesso (login) do paciente, sempre com o perfil Paciente."""
+
+    username = forms.CharField(
+        required=False, max_length=10, label="Nome de usuário (login)",
+        help_text="Opcional: preencha usuário, e-mail e senha para criar o acesso do paciente ao sistema.",
+    )
+    email = forms.EmailField(required=False, max_length=50, label="E-mail de acesso")
+    senha = forms.CharField(required=False, widget=forms.PasswordInput, label="Senha de acesso (mínimo 8 caracteres)")
+
+    class Meta:
+        model = func_django
+        fields = ["cpf", "nome", "telefone", "data_nascimento"]
+        widgets = {"data_nascimento": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")}
+        labels = {"cpf": "CPF", "nome": "Nome", "telefone": "Telefone",
+                  "data_nascimento": "Data de nascimento"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._perfil = None
+
+    def clean(self):
+        dados = super().clean()
+        username = (dados.get("username") or "").strip()
+        email = (dados.get("email") or "").strip().lower()
+        senha = dados.get("senha") or ""
+        if not (username or email or senha):
+            return dados
+
+        if not (username and email and senha):
+            self.add_error(None, "Para criar o acesso, preencha usuário, e-mail e senha (ou deixe os três em branco).")
+            return dados
+        if not validar_nome(username):
+            self.add_error("username", "Use apenas letras e espaços (mínimo de 3 caracteres).")
+        elif Usuario.objects.filter(username=username).exists():
+            self.add_error("username", "Nome de usuário já cadastrado.")
+        if not validar_email(email):
+            self.add_error("email", "E-mail inválido.")
+        elif Usuario.objects.filter(email=email).exists():
+            self.add_error("email", "E-mail já cadastrado.")
+        if len(senha) < 8:
+            self.add_error("senha", "A senha deve ter no mínimo 8 caracteres.")
+
+        self._perfil = next(
+            (p for p in Perfil.objects.all() if chave_perfil(p.nome_perfil) == _n(PERFIL_PACIENTE)), None
+        )
+        if self._perfil is None:
+            self.add_error(None, "O perfil Paciente não existe na tabela de perfis. Peça ao administrador para cadastrá-lo.")
+        dados["username"], dados["email"] = username, email
+        return dados
+
+    def save(self, commit=True):
+        with transaction.atomic():
+            paciente = super().save(commit=commit)
+            dados = self.cleaned_data
+            if self._perfil is not None and dados.get("username") and dados.get("email") and dados.get("senha"):
+                salt = secrets.token_hex(16)
+                Usuario.objects.create(
+                    username=dados["username"], email=dados["email"],
+                    salt=salt, senha_hash=gerar_hash(dados["senha"], salt),
+                    id_perfil=self._perfil, paciente=paciente,
+                )
+        return paciente
 
 
 # Cada recurso vira lista + cadastro + exclusão usando os mesmos 3 templates.
@@ -111,9 +194,9 @@ class UsuarioForm(forms.ModelForm):
 # esconder: campos que nunca aparecem no formulário
 RECURSOS = {
     "pacientes": {
-        "model": func_django, "titulo": "Pacientes", "escopo": {"medico": "medico", "paciente": "cpf"},
+        "model": func_django, "titulo": "Pacientes", "form": PacienteForm, "escopo": {"medico": "agendamento__medico", "paciente": "cpf"},
         "colunas": [("cpf", "CPF"), ("nome", "Nome"), ("telefone", "Telefone"),
-                    ("data_nascimento", "Nascimento"), ("medico", "Médico")],
+                    ("data_nascimento", "Nascimento")],
         "busca": ["nome", "cpf"],
     },
     "medicos": {
@@ -138,7 +221,7 @@ RECURSOS = {
     },
     "consultas": {
         "model": Agendamento, "titulo": "Consultas", "escopo": {"medico": "medico", "paciente": "paciente"},
-        "colunas": [("paciente", "Paciente"), ("medico", "Médico"), ("data_hora", "Data e hora"), ("status", "Status")],
+        "colunas": [("paciente", "Paciente"), ("tipo", "Tipo"), ("medico", "Médico"), ("data_hora", "Data e hora"), ("status", "Status")],
         "busca": ["paciente__nome", "medico__nome"],
     },
     "prontuarios": {
@@ -254,7 +337,9 @@ def aplicar_escopo(request, cfg, qs):
     campo = cfg.get("escopo", {}).get(chave)
     if not campo or not valor:
         return qs.none()  # na dúvida, não mostra nada
-    return qs.filter(**{campo: valor})
+    qs = qs.filter(**{campo: valor})
+    # médico enxerga os pacientes que têm consulta com ele (junção pode repetir linhas)
+    return qs.distinct() if cfg["model"] is func_django and "__" in campo else qs
 
 
 def get_recurso(recurso):
@@ -355,6 +440,7 @@ def dashboard(request):
         proxima_consulta = (
             Agendamento.objects.select_related("medico")
             .filter(paciente=cpf, data_hora__gte=timezone.now())
+            .exclude(filtro_status(NOMES_SOLICITADA)).exclude(filtro_status(NOMES_CANCELADA))
             .order_by("data_hora").first()
         )
 
@@ -378,6 +464,13 @@ def rotulo(obj):
         if valor:
             return str(valor)
     return str(obj)
+
+
+def valor_da_celula(obj, campo, recurso):
+    valor = getattr(obj, campo)
+    if recurso == "consultas" and campo == "data_hora" and eh_status(obj, NOMES_SOLICITADA):
+        return f"{data_local(valor):%d/%m/%Y} (horário a definir)"
+    return formatar(valor)
 
 
 def formatar(valor):
@@ -421,7 +514,7 @@ def lista(request, recurso):
 
     campos = [c for c, _ in cfg["colunas"]]
     linhas = [
-        {"pk": obj.pk, "valores": [formatar(getattr(obj, c)) for c in campos],
+        {"pk": obj.pk, "valores": [valor_da_celula(obj, c, recurso) for c in campos],
          "pendente": recurso == "consultas" and eh_status(obj, NOMES_SOLICITADA)}
         for obj in qs
     ]
@@ -464,9 +557,14 @@ def novo(request, recurso):
     )
     form = Form(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Cadastro salvo com sucesso.")
-        return redirect("lista", recurso=recurso)
+        try:
+            form.save()
+        except IntegrityError as erro:
+            detalhe = erro.args[-1] if erro.args else erro
+            form.add_error(None, f"O banco de dados recusou o cadastro: {detalhe}")
+        else:
+            messages.success(request, "Cadastro salvo com sucesso.")
+            return redirect("lista", recurso=recurso)
     return render(request, "form.html", {
         "form": form, "recurso": recurso, "ativo": recurso,
         "titulo": f"Cadastrar em {cfg['titulo'].lower()}",
@@ -539,7 +637,7 @@ def financeiro(request):
 
 class AgendamentoChoice(forms.ModelChoiceField):
     def label_from_instance(self, ag):
-        return f"{ag.paciente.nome} ({ag.paciente.cpf}) - {ag.data_hora:%d/%m/%Y %H:%M}"
+        return f"{ag.tipo} - {ag.paciente.nome} ({ag.paciente.cpf}) - {ag.data_hora:%d/%m/%Y %H:%M}"
 
 
 class PagamentoForm(forms.ModelForm):
@@ -591,6 +689,7 @@ def novo_pagamento(request):
 NOMES_SOLICITADA = ("Solicitada", "Solicitado")
 NOMES_CONFIRMADA = ("Agendada", "Agendado", "Confirmada", "Confirmado")
 NOMES_CANCELADA = ("Cancelada", "Cancelado", "Recusada", "Recusado")
+TIPOS_ATENDIMENTO = [("Consulta", "Consulta"), ("Exame", "Exame")]
 
 
 def filtro_status(nomes):
@@ -616,7 +715,23 @@ def agora_como(data):
     return timezone.now() if timezone.is_aware(data) else dt.datetime.now()
 
 
-class SolicitarConsultaForm(forms.Form):
+def combinar(data, hora):
+    quando = dt.datetime.combine(data, hora)
+    return timezone.make_aware(quando) if settings.USE_TZ else quando
+
+
+def inicio_do_dia(data):
+    return combinar(data, dt.time.min)
+
+
+def data_local(valor):
+    if timezone.is_aware(valor):
+        valor = timezone.localtime(valor)
+    return valor.date()
+
+
+class EscolhaEspecialidadeForm(forms.Form):
+    tipo = forms.ChoiceField(choices=TIPOS_ATENDIMENTO, label="Tipo de atendimento")
     especialidade = forms.ModelChoiceField(
         queryset=Especialidade.objects.filter(medicoespecialidade__medico__ativo=True).distinct().order_by("nome"),
         label="Especialidade",
@@ -649,6 +764,36 @@ class SolicitarConsultaForm(forms.Form):
         return dados
 
 
+class SolicitarConsultaForm(forms.Form):
+    """O paciente pede só a especialidade e o dia; a recepção define médico e horário."""
+
+    tipo = forms.ChoiceField(choices=TIPOS_ATENDIMENTO, label="Tipo de atendimento")
+    especialidade = forms.ModelChoiceField(
+        queryset=Especialidade.objects.filter(medicoespecialidade__medico__ativo=True).distinct().order_by("nome"),
+        label="Especialidade",
+    )
+    data = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"), label="Data desejada")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["especialidade"].label_from_instance = lambda e: e.nome
+
+    def clean(self):
+        dados = super().clean()
+        esp, data = dados.get("especialidade"), dados.get("data")
+        if esp and data:
+            if data < dt.date.today():
+                self.add_error("data", "Escolha uma data de hoje em diante.")
+            else:
+                # médico provisório da especialidade; a recepção pode trocá-lo ao aceitar
+                medico = Medico.objects.filter(ativo=True, medicoespecialidade__especialidade=esp).order_by("nome").first()
+                if medico is None:
+                    self.add_error("especialidade", "Não há médico ativo nessa especialidade.")
+                else:
+                    dados["medico"] = medico
+        return dados
+
+
 @login_requerido
 def solicitar_consulta(request):
     exigir(request, "consultas", "solicitar")
@@ -662,13 +807,14 @@ def solicitar_consulta(request):
     if request.method == "POST" and form.is_valid():
         Agendamento.objects.create(
             paciente=paciente, medico=form.cleaned_data["medico"],
-            data_hora=form.cleaned_data["data_hora"], status=obter_status(NOMES_SOLICITADA),
+            data_hora=inicio_do_dia(form.cleaned_data["data"]), status=obter_status(NOMES_SOLICITADA),
+            tipo=form.cleaned_data["tipo"],
         )
-        messages.success(request, f"Solicitação enviada para {form.cleaned_data['especialidade'].nome} (Dr(a). {form.cleaned_data['medico'].nome}). Aguarde a confirmação da recepção.")
+        messages.success(request, f"Solicitação de {form.cleaned_data['tipo'].lower()} enviada para {form.cleaned_data['especialidade'].nome} em {form.cleaned_data['data']:%d/%m/%Y}. A recepção vai definir o horário e confirmar.")
         return redirect("lista", recurso="consultas")
     return render(request, "form.html", {
         "form": form, "recurso": "consultas", "ativo": "consultas",
-        "titulo": "Solicitar consulta", "botao": "Enviar solicitação",
+        "titulo": "Solicitar consulta ou exame", "botao": "Enviar solicitação",
         "voltar": reverse("lista", args=["consultas"]),
     })
 
@@ -730,7 +876,7 @@ def pagar(request):
         pendente = (StatusPagamento.objects.filter(descricao__iexact="Pendente").first()
                     or StatusPagamento.objects.create(descricao="Pendente"))
         Pagamento.objects.create(
-            agendamento=ag, descricao=f"Consulta de {formatar(ag.data_hora)}",
+            agendamento=ag, descricao=f"{ag.tipo} de {formatar(ag.data_hora)}",
             valor=form.cleaned_data["valor"], forma_pagamento=form.cleaned_data["forma_pagamento"],
             status_pagamento=pendente, data_pagamento=dt.date.today(),
         )
@@ -755,3 +901,81 @@ def confirmar_pagamento(request, pk):
     else:
         messages.warning(request, "Este pagamento não está pendente.")
     return redirect("financeiro")
+
+
+class AgendarConsultaForm(EscolhaEspecialidadeForm):
+    """Cadastro de consulta pela recepção: paciente + especialidade + data.
+    O médico livre da especialidade é escolhido automaticamente."""
+
+    paciente = forms.ModelChoiceField(queryset=func_django.objects.order_by("nome"), label="Paciente")
+    field_order = ["paciente", "tipo", "especialidade", "data_hora"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["paciente"].label_from_instance = rotulo
+
+    def save(self):
+        dados = self.cleaned_data
+        return Agendamento.objects.create(
+            paciente=dados["paciente"], medico=dados["medico"],
+            data_hora=dados["data_hora"], status=obter_status(NOMES_CONFIRMADA), tipo=dados["tipo"],
+        )
+
+
+RECURSOS["consultas"]["form"] = AgendarConsultaForm
+
+
+class AceitarConsultaForm(forms.Form):
+    """A recepção confere a disponibilidade e define médico e horário."""
+
+    medico = forms.ModelChoiceField(queryset=Medico.objects.none(), label="Médico")
+    horario = forms.TimeField(widget=forms.TimeInput(attrs={"type": "time"}, format="%H:%M"), label="Horário da consulta")
+
+    def __init__(self, *args, agendamento, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.agendamento = agendamento
+        especialidades = MedicoEspecialidade.objects.filter(medico=agendamento.medico).values("especialidade_id")
+        self.fields["medico"].queryset = Medico.objects.filter(
+            Q(pk=agendamento.medico_id) | Q(ativo=True, medicoespecialidade__especialidade__in=especialidades)
+        ).distinct().order_by("nome")
+        self.fields["medico"].label_from_instance = rotulo
+        self.fields["medico"].initial = agendamento.medico_id
+
+    def clean(self):
+        dados = super().clean()
+        medico, hora = dados.get("medico"), dados.get("horario")
+        if medico and hora:
+            quando = combinar(data_local(self.agendamento.data_hora), hora)
+            if quando <= agora_como(quando):
+                self.add_error("horario", "Esse horário já passou.")
+            elif (Agendamento.objects.filter(medico=medico, data_hora=quando).exclude(pk=self.agendamento.pk)
+                  .exclude(filtro_status(NOMES_CANCELADA)).exclude(filtro_status(NOMES_SOLICITADA)).exists()):
+                self.add_error("horario", "Esse médico já tem consulta nesse horário. Escolha outro horário ou outro médico.")
+            else:
+                dados["quando"] = quando
+        return dados
+
+
+@login_requerido
+def aceitar_consulta(request, pk):
+    exigir(request, "consultas", "aceitar")
+    ag = get_object_or_404(Agendamento.objects.select_related("status", "medico", "paciente"), pk=pk)
+    if not eh_status(ag, NOMES_SOLICITADA):
+        messages.warning(request, "Esta solicitação já foi respondida.")
+        return redirect("lista", recurso="consultas")
+
+    form = AceitarConsultaForm(request.POST or None, agendamento=ag)
+    if request.method == "POST" and form.is_valid():
+        ag.medico = form.cleaned_data["medico"]
+        ag.data_hora = form.cleaned_data["quando"]
+        ag.status = obter_status(NOMES_CONFIRMADA)
+        ag.save(update_fields=["medico", "data_hora", "status"])
+        messages.success(request, "Consulta confirmada com horário e médico definidos.")
+        return redirect("lista", recurso="consultas")
+
+    dia = data_local(ag.data_hora)
+    return render(request, "form.html", {
+        "form": form, "recurso": "consultas", "ativo": "consultas",
+        "titulo": f"Aceitar {ag.tipo.lower()} de {ag.paciente.nome or ag.paciente.cpf} em {dia:%d/%m/%Y}",
+        "botao": "Confirmar consulta", "voltar": reverse("lista", args=["consultas"]),
+    })

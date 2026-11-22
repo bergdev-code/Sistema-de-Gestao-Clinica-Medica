@@ -7,9 +7,10 @@
 <form method="POST" class="form-card" novalidate>
     {% csrf_token %}
     {% for campo in form %}
-    <div class="form-field">
+    <div class="form-field" {% if campo.field.widget.attrs.grupo %}data-grupo="{{ campo.field.widget.attrs.grupo }}"{% endif %}>
         <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
         {{ campo }}
+        {% if campo.help_text %}<small class="field-hint">{{ campo.help_text }}</small>{% endif %}
         {% for erro in campo.errors %}<small class="field-error">{{ erro }}</small>{% endfor %}
     </div>
     {% endfor %}
@@ -20,4 +21,21 @@
         <button type="submit" class="btn btn-primary">{{ botao|default:"Salvar" }}</button>
     </div>
 </form>
+
+<script>
+/* Mostra só os campos do perfil escolhido (médico ou paciente) */
+(function () {
+    var sel = document.getElementById("id_id_perfil");
+    if (!sel) return;
+    function norm(t) { return t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
+    function atualizar() {
+        var perfil = norm(sel.options[sel.selectedIndex].text);
+        document.querySelectorAll("[data-grupo]").forEach(function (el) {
+            el.style.display = perfil.indexOf(el.dataset.grupo) === 0 ? "" : "none";
+        });
+    }
+    sel.addEventListener("change", atualizar);
+    atualizar();
+})();
+</script>
 {% endblock %}

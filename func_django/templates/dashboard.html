@@ -99,13 +99,17 @@
                 <strong>{{ proxima_consulta.data_hora|date:"d/m/Y H:i" }}</strong>
             </div>
             <div class="info-item">
+                <span>Tipo:</span>
+                <strong>{{ proxima_consulta.tipo }}</strong>
+            </div>
+            <div class="info-item">
                 <span>Médico:</span>
                 <strong>{{ proxima_consulta.medico.nome }}</strong>
             </div>
             {% else %}
             <div class="info-item"><span>Você não tem consultas agendadas.</span></div>
             {% endif %}
-            <p style="margin-top: 16px;"><a class="btn btn-primary" href="{% url 'solicitar_consulta' %}">Solicitar consulta</a></p>
+            <p style="margin-top: 16px;"><a class="btn btn-primary" href="{% url 'solicitar_consulta' %}">Solicitar consulta ou exame</a></p>
         </section>
         {% endif %}
 

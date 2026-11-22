@@ -190,6 +190,8 @@ class Agendamento(models.Model):
         db_column='status_id'
     )
 
+    tipo = models.CharField(max_length=20, default='Consulta')
+
     class Meta:
         db_table = 'agendamentos'
         managed = False
