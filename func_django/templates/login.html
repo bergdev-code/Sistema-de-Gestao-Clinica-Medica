@@ -73,6 +73,20 @@
                     <button type="submit" class="primary-button">Entrar na minha conta <span>→</span></button>
                 </form>
 
+                <div class="google-divider">
+    <span>ou</span>
+</div>
+
+<a href="{% url 'google_login' %}" class="google-button">
+    <img
+        src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+        alt=""
+        width="20"
+        height="20"
+    >
+    <span>Continuar com Google</span>
+</a>
+
                 <div class="signup-prompt">
                     Ainda não tem uma conta?
                     <a href="{% url 'cadastro_publico' %}" class="signup-link">

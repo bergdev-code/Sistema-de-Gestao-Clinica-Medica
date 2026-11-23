@@ -22,6 +22,13 @@ from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.views.decorators.http import require_POST
+import re
+import requests
+
+from urllib.parse import urlencode
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 from sistema_clinica.funcionalidades.regex import validar_email, validar_nome
 from func_django.models import (
@@ -37,6 +44,7 @@ from func_django.models import (
     StatusAgendamento,
     StatusPagamento,
     Usuario,
+    GoogleIdentity,
     func_django,
 )
 
@@ -451,6 +459,331 @@ def login_view(request):
 def logout_view(request):
     request.session.flush()
     return redirect("login")
+
+# ==================================================
+# LOGIN COM GOOGLE
+# ==================================================
+
+def gerar_username_google(email):
+    """
+    Gera um username único de até 10 caracteres,
+    respeitando o limite do campo Usuario.username.
+    """
+    base = email.split("@")[0].lower()
+    base = re.sub(r"[^a-z0-9_]", "", base)[:10]
+
+    if len(base) < 3:
+        base = "google"
+
+    username = base
+    contador = 1
+
+    while Usuario.objects.filter(username__iexact=username).exists():
+        sufixo = str(contador)
+        username = base[:10 - len(sufixo)] + sufixo
+        contador += 1
+
+    return username
+
+
+def obter_perfil_paciente():
+    return next(
+        (
+            perfil for perfil in Perfil.objects.all()
+            if chave_perfil(perfil.nome_perfil) == _n(PERFIL_PACIENTE)
+        ),
+        None
+    )
+
+
+def google_login(request):
+    """
+    Inicia o processo de autenticação com o Google.
+    """
+    if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
+        messages.error(request, "A autenticação Google ainda não foi configurada.")
+        return redirect("login")
+
+    state = secrets.token_urlsafe(32)
+    request.session["google_oauth_state"] = state
+
+    parametros = {
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "prompt": "select_account",
+    }
+
+    url_google = (
+        "https://accounts.google.com/o/oauth2/v2/auth?"
+        + urlencode(parametros)
+    )
+
+    return redirect(url_google)
+
+
+def google_callback(request):
+    """
+    Recebe a resposta do Google, verifica a identidade
+    e cria ou recupera a conta do paciente.
+    """
+    estado_recebido = request.GET.get("state")
+    estado_salvo = request.session.pop("google_oauth_state", None)
+
+    if not estado_salvo or estado_recebido != estado_salvo:
+        messages.error(request, "Não foi possível validar a autenticação Google.")
+        return redirect("login")
+
+    codigo = request.GET.get("code")
+
+    if not codigo:
+        messages.error(request, "A autenticação Google foi cancelada.")
+        return redirect("login")
+
+    try:
+        resposta = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": codigo,
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+            timeout=15,
+        )
+
+        resposta.raise_for_status()
+        tokens = resposta.json()
+
+        token_id = tokens.get("id_token")
+
+        if not token_id:
+            raise ValueError("O Google não retornou um ID token.")
+
+        dados_google = id_token.verify_oauth2_token(
+            token_id,
+            google_requests.Request(),
+            settings.GOOGLE_CLIENT_ID,
+        )
+
+        if not dados_google.get("email_verified"):
+            raise ValueError("O e-mail da conta Google não foi verificado.")
+
+        google_sub = dados_google["sub"]
+        email = dados_google["email"].strip().lower()
+        nome_google = dados_google.get("name", "").strip()
+
+        if len(email) > 50:
+            messages.error(
+                request,
+                "O e-mail da conta Google ultrapassa o limite aceito pelo sistema."
+            )
+            return redirect("login")
+
+    except (requests.RequestException, ValueError, KeyError):
+        messages.error(
+            request,
+            "Não foi possível validar sua conta Google. Tente novamente."
+        )
+        return redirect("login")
+
+    # Se essa conta Google já estiver cadastrada, recupera o usuário.
+    identidade = (
+        GoogleIdentity.objects
+        .select_related("usuario__id_perfil", "usuario__paciente", "usuario__medico")
+        .filter(google_sub=google_sub)
+        .first()
+    )
+
+    if identidade:
+        usuario = identidade.usuario
+
+    else:
+        # Não vincula automaticamente uma conta tradicional
+        # apenas porque o e-mail é igual.
+        if Usuario.objects.filter(email__iexact=email).exists():
+            messages.error(
+                request,
+                "Já existe uma conta com esse e-mail. Entre pelo login tradicional."
+            )
+            return redirect("login")
+
+        perfil = obter_perfil_paciente()
+
+        if perfil is None:
+            messages.error(
+                request,
+                "O perfil Paciente não foi encontrado no sistema."
+            )
+            return redirect("login")
+
+        try:
+            with transaction.atomic():
+                salt = secrets.token_hex(16)
+
+                # Senha aleatória, não conhecida pelo usuário.
+                senha_aleatoria = secrets.token_urlsafe(48)
+
+                usuario = Usuario.objects.create(
+                    username=gerar_username_google(email),
+                    email=email,
+                    salt=salt,
+                    senha_hash=gerar_hash(senha_aleatoria, salt),
+                    id_perfil=perfil,
+                    paciente=None,
+                    medico=None,
+                )
+
+                GoogleIdentity.objects.create(
+                    usuario=usuario,
+                    google_sub=google_sub,
+                    nome_google=nome_google[:150],
+                )
+
+        except IntegrityError:
+            messages.error(
+                request,
+                "Não foi possível criar sua conta. Tente entrar novamente."
+            )
+            return redirect("login")
+
+    # Usa o mesmo mecanismo de sessão do login tradicional.
+    abrir_sessao(
+        request,
+        usuario.username,
+        usuario.email,
+        usuario.id_perfil.nome_perfil,
+        crm=usuario.medico_id or "",
+        cpf=usuario.paciente_id or "",
+    )
+
+    return redirect("dashboard")
+
+
+# ==================================================
+# COMPLETAR CADASTRO DO PACIENTE GOOGLE
+# ==================================================
+
+@login_requerido
+def completar_cadastro_google(request):
+    """
+    Cria o paciente e vincula ao usuário Google
+    depois que os dados obrigatórios forem informados.
+    """
+
+    usuario = (
+        Usuario.objects
+        .select_related("id_perfil", "paciente")
+        .filter(username=request.session.get("username"))
+        .first()
+    )
+
+    if usuario is None:
+        messages.error(request, "Não foi possível localizar sua conta.")
+        return redirect("login")
+
+    # Somente contas criadas/vinculadas pelo Google podem usar esta tela.
+    identidade = GoogleIdentity.objects.filter(usuario=usuario).first()
+
+    if identidade is None:
+        messages.error(request, "Esta conta não possui cadastro Google vinculado.")
+        return redirect("dashboard")
+
+    if chave_perfil(usuario.id_perfil.nome_perfil) != _n(PERFIL_PACIENTE):
+        messages.error(request, "Esta página é exclusiva para pacientes.")
+        return redirect("dashboard")
+
+    # Se já existe paciente vinculado, não precisa preencher novamente.
+    if usuario.paciente_id:
+        request.session["cpf"] = usuario.paciente_id
+        return redirect("dashboard")
+
+    erros = {}
+    dados = {
+        "nome": identidade.nome_google,
+        "cpf": "",
+        "telefone": "",
+        "data_nascimento": "",
+    }
+
+    if request.method == "POST":
+        dados["nome"] = request.POST.get("nome", "").strip()
+        dados["cpf"] = re.sub(r"\D", "", request.POST.get("cpf", ""))
+        dados["telefone"] = re.sub(
+            r"\D", "", request.POST.get("telefone", "")
+        )
+        dados["data_nascimento"] = request.POST.get(
+            "data_nascimento", ""
+        ).strip()
+
+        if len(dados["nome"]) < 3 or len(dados["nome"]) > 150:
+            erros["nome"] = "Informe seu nome completo."
+
+        if not re.fullmatch(r"\d{11}", dados["cpf"]):
+            erros["cpf"] = "O CPF deve conter 11 números."
+        elif func_django.objects.filter(cpf=dados["cpf"]).exists():
+            erros["cpf"] = "Este CPF já está cadastrado."
+
+        if not re.fullmatch(r"\d{10,11}", dados["telefone"]):
+            erros["telefone"] = "Informe um telefone com DDD."
+
+        data_nascimento = None
+
+        try:
+            data_nascimento = dt.date.fromisoformat(
+                dados["data_nascimento"]
+            )
+
+            if data_nascimento >= dt.date.today():
+                erros["data_nascimento"] = (
+                    "Informe uma data de nascimento válida."
+                )
+
+        except (ValueError, TypeError):
+            erros["data_nascimento"] = (
+                "Informe uma data de nascimento válida."
+            )
+
+        if not erros:
+            try:
+                with transaction.atomic():
+                    paciente = func_django.objects.create(
+                        cpf=dados["cpf"],
+                        nome=dados["nome"],
+                        telefone=dados["telefone"],
+                        data_nascimento=data_nascimento,
+                    )
+
+                    usuario.paciente = paciente
+                    usuario.save(update_fields=["paciente"])
+
+                request.session["cpf"] = paciente.cpf
+
+                messages.success(
+                    request,
+                    "Cadastro concluído! Seus dados foram salvos com sucesso."
+                )
+
+                return redirect("dashboard")
+
+            except IntegrityError:
+                erros["cpf"] = (
+                    "Não foi possível salvar o cadastro. "
+                    "Verifique se o CPF já está sendo utilizado."
+                )
+
+    return render(
+        request,
+        "completar_cadastro_google.html",
+        {
+            "dados": dados,
+            "erros": erros,
+            "ativo": "conta",
+        }
+    )
 
 
 @login_requerido

@@ -1,19 +1,4 @@
-"""
-URL configuration for config project.
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
 from django.urls import path
 from func_django import views
@@ -21,43 +6,57 @@ from func_django import views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    
+    # LOGIN COM GOOGLE
+    path("google/entrar/", views.google_login, name="google_login"),
+    path("google/callback/", views.google_callback, name="google_callback"),
+    path(
+        "completar-cadastro/",
+        views.completar_cadastro_google,
+        name="completar_cadastro_google"
+    ),
 
+    # LOGIN E CADASTRO
     path("", views.login_view, name="login"),
     path("cadastro/", views.cadastro_publico, name="cadastro_publico"),
-
     path("sair/", views.logout_view, name="logout"),
+
+
+    # PAINEL E CONTA
     path("painel/", views.dashboard, name="dashboard"),
     path("conta/", views.conta, name="conta"),
 
+    # CONSULTAS
     path("consultas/solicitar/", views.solicitar_consulta, name="solicitar_consulta"),
     path("consultas/<int:pk>/aceitar/", views.aceitar_consulta, name="aceitar_consulta"),
-    path("consultas/<int:pk>/recusar/", views.responder_consulta, {"acao": "recusar"}, name="recusar_consulta"),
+    path(
+        "consultas/<int:pk>/recusar/",
+        views.responder_consulta,
+        {"acao": "recusar"},
+        name="recusar_consulta"
+    ),
 
+    # FINANCEIRO
     path("financeiro/", views.financeiro, name="financeiro"),
     path("financeiro/pagar/", views.pagar, name="pagar"),
     path("financeiro/<int:pk>/confirmar/", views.confirmar_pagamento, name="confirmar_pagamento"),
     path("financeiro/novo/", views.novo_pagamento, name="novo_pagamento"),
 
-    # Rotas genéricas sempre no final
+    # DETALHES E ALERGIAS DOS PACIENTES
+    path("pacientes/<str:cpf>/", views.detalhe_paciente, name="detalhe_paciente"),
+    path(
+        "pacientes/<str:cpf>/alergias/adicionar/",
+        views.adicionar_alergia,
+        name="adicionar_alergia"
+    ),
+    path(
+        "pacientes/<str:cpf>/alergias/<int:pk>/excluir/",
+        views.excluir_alergia,
+        name="excluir_alergia"
+    ),
+
+    # ROTAS GENÉRICAS SEMPRE NO FINAL
     path("<slug:recurso>/", views.lista, name="lista"),
     path("<slug:recurso>/novo/", views.novo, name="novo"),
     path("<slug:recurso>/<str:pk>/excluir/", views.excluir, name="excluir"),
-path(
-    "pacientes/<str:cpf>/",
-    views.detalhe_paciente,
-    name="detalhe_paciente"
-),
-
-path(
-    "pacientes/<str:cpf>/alergias/adicionar/",
-    views.adicionar_alergia,
-    name="adicionar_alergia"
-),
-
-path(
-    "pacientes/<str:cpf>/alergias/<int:pk>/excluir/",
-    views.excluir_alergia,
-    name="excluir_alergia"
-),
-
 ]

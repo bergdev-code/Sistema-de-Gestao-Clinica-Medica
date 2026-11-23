@@ -11,7 +11,43 @@
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
     <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
     <style>
+
+        .user-account-area {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.notification-bell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    text-decoration: none;
+    font-size: 19px;
+    transition: background .2s;
+}
+
+.notification-bell:hover {
+    background: rgba(255, 255, 255, .14);
+}
+
+.notification-dot {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #ef4444;
+    border: 1px solid white;
+}
+
         /* Menu lateral recolhível e botão de três traços */
         .brand-area { display: flex; align-items: center; gap: 14px; }
         .menu-toggle { display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: #fff; padding: 8px; border-radius: 8px; cursor: pointer; transition: .2s; }
@@ -76,10 +112,26 @@
             ☀️
         </button>
 
-        <a class="user-details" href="{% url 'conta' %}" title="Minha conta">
-            <strong>{{ request.session.username }}</strong>
-            <span>{{ request.session.perfil }}</span>
+        <div class="user-account-area">
+
+    <a class="user-details" href="{% url 'conta' %}" title="Minha conta">
+        <strong>{{ request.session.username }}</strong>
+        <span>{{ request.session.perfil }}</span>
+    </a>
+
+    {% if mostrar_completar_cadastro %}
+        <a
+            href="{% url 'completar_cadastro_google' %}"
+            class="notification-bell"
+            title="Complete seu cadastro"
+            aria-label="Você possui dados pendentes no cadastro"
+        >
+            <span aria-hidden="true">🔔</span>
+            <span class="notification-dot"></span>
         </a>
+    {% endif %}
+
+</div>
 
         <form method="POST" action="{% url 'logout' %}">
             {% csrf_token %}

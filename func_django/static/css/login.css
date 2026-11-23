@@ -118,3 +118,149 @@ body {
     .theme-toggle { top: 20px; right: 20px; }
     .form-heading h2 { font-size: 27px; }
 }
+
+.google-divider {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 22px 0;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.google-divider::before,
+.google-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #e2e8f0;
+}
+
+.google-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 48px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #fff;
+    color: #334155;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background .2s, box-shadow .2s;
+}
+
+.google-button:hover {
+    background: #f8fafc;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
+}
+
+
+/* COMPLETAR CADASTRO GOOGLE */
+
+.complete-registration-card {
+    padding: 30px;
+    max-width: 850px;
+    margin: 25px auto;
+}
+
+.registration-header {
+    margin-bottom: 28px;
+}
+
+.registration-header h2 {
+    margin-bottom: 12px;
+    font-size: 23px;
+}
+
+.registration-header p {
+    color: #94a3b8;
+    line-height: 1.6;
+    margin-top: 10px;
+}
+
+.registration-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+}
+
+.registration-form .field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.registration-form .field label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.registration-form .field input {
+    width: 100%;
+    height: 45px;
+    padding: 10px 13px;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    background: #0f172a;
+    color: #f8fafc;
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.registration-form .field input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.registration-form .field input::placeholder {
+    color: #64748b;
+}
+
+.registration-form .primary-button {
+    margin-top: 25px;
+    min-width: 180px;
+    padding: 12px 22px;
+    border: none;
+    border-radius: 8px;
+    background: #2563eb;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.registration-form .primary-button:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+.registration-form .alert {
+    margin-top: 3px;
+    font-size: 12px;
+}
+
+/* RESPONSIVIDADE */
+
+@media (max-width: 650px) {
+    .complete-registration-card {
+        padding: 20px;
+        margin: 15px auto;
+    }
+
+    .registration-grid {
+        grid-template-columns: 1fr;
+        gap: 17px;
+    }
+
+    .registration-form .primary-button {
+        width: 100%;
+    }
+}

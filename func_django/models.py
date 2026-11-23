@@ -102,6 +102,32 @@ class Usuario(models.Model):
     class Meta:
         db_table = 'usuarios'
         managed = True
+        
+class GoogleIdentity(models.Model):
+    id_google = models.AutoField(primary_key=True)
+
+    usuario = models.OneToOneField(
+        Usuario,
+        on_delete=models.CASCADE,
+        db_column="id_usuario",
+        related_name="google_identity"
+    )
+
+    google_sub = models.CharField(
+        max_length=255,
+        unique=True
+    )
+
+    nome_google = models.CharField(
+        max_length=150,
+        blank=True
+    )
+
+    class Meta:
+        db_table = "google_identity"
+
+    def __str__(self):
+        return self.usuario.email
 
 class Prontuario(models.Model):
     id_prontuario = models.AutoField(primary_key=True)
