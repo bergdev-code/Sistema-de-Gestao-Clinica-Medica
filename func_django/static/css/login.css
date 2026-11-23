@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap');
-
 :root {
     color-scheme: light;
     --page: #f3f6fb;
@@ -40,9 +38,9 @@ body {
 .visual-panel {
     position: relative; isolation: isolate; min-height: 690px; padding: 42px 48px;
     display: flex; flex-direction: column; justify-content: space-between; color: white;
-    background: #123d62 url("https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1500&q=85") center/cover no-repeat;
+    background: #123d62 url("https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=70") center/cover no-repeat;
     background-image: linear-gradient(145deg, rgba(9, 39, 66, .91), rgba(15, 92, 137, .52)),
-      url("https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1500&q=85");
+      url("https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=70");
 }
 .visual-panel::after {
     content: ""; position: absolute; z-index: -1; inset: 0;

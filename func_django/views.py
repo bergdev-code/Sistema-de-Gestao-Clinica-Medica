@@ -335,7 +335,8 @@ def cpf_da_sessao(request):
     if not cpf and request.session.get("username"):
         cpf = (Usuario.objects.filter(username=request.session["username"])
                .values_list("paciente_id", flat=True).first()) or ""
-        request.session["cpf"] = cpf
+        if request.session.get("cpf") != cpf:  # só grava a sessão se algo mudou
+            request.session["cpf"] = cpf
     return cpf
 
 
@@ -354,6 +355,11 @@ def aplicar_escopo(request, cfg, qs):
     qs = qs.filter(**{campo: valor})
     # médico enxerga os pacientes que têm consulta com ele (junção pode repetir linhas)
     return qs.distinct() if cfg["model"] is func_django and "__" in campo else qs
+
+
+def pacientes_visiveis(request):
+    """Pacientes que o perfil logado pode ver (recepção/admin: todos; médico: os dele)."""
+    return aplicar_escopo(request, RECURSOS["pacientes"], func_django.objects.all())
 
 
 def get_recurso(recurso):
@@ -464,22 +470,11 @@ def dashboard(request):
     # ==========================================
     if eh_paciente:
         usuario = (
-    Usuario.objects
-    .select_related("paciente")
-    .filter(username=request.session.get("username"))
-    .first()
-)
-
+            Usuario.objects.select_related("paciente")
+            .filter(username=request.session.get("username"))
+            .first()
+        )
         paciente = usuario.paciente if usuario else None
-
-        if paciente is None:
-            return render(request, "dashboard.html", {
-            "ativo": "dashboard",
-            "mostrar_area_paciente": True,
-            "paciente_nao_vinculado": True,
-        })
-
-        cpf = paciente.cpf
 
         if paciente is None:
             return render(request, "dashboard.html", {
@@ -488,51 +483,32 @@ def dashboard(request):
                 "paciente_nao_vinculado": True,
             })
 
-        # Consultas e exames do próprio paciente
-        agendamentos = (
-            Agendamento.objects
-            .filter(paciente_id=paciente.cpf)
-            .select_related("medico", "status")
-            .order_by("-data_hora")
-        )
+        cpf = paciente.cpf
+        agora = timezone.now()
 
-        # Próxima consulta ou exame
-        proxima_consulta = (
-            agendamentos
-            .filter(data_hora__gte=timezone.now())
-            .exclude(filtro_status(NOMES_SOLICITADA))
-            .exclude(filtro_status(NOMES_CANCELADA))
-            .order_by("data_hora")
-            .first()
+        # cada lista é buscada UMA vez; contagens e "próxima consulta" saem da memória
+        agendamentos = list(
+            Agendamento.objects.filter(paciente_id=cpf)
+            .select_related("medico", "status").order_by("-data_hora")
         )
-
-        # Prontuários do paciente
-        prontuarios = (
-            Prontuario.objects
-            .filter(paciente_id=paciente.cpf)
-            .select_related("medico")
-            .order_by("-id_prontuario")
+        proxima_consulta = next(
+            (a for a in reversed(agendamentos)
+             if a.data_hora >= agora
+             and not eh_status(a, NOMES_SOLICITADA) and not eh_status(a, NOMES_CANCELADA)),
+            None,
         )
-
-        # Alergias do paciente
-        alergias = (
-            Alergia.objects
-            .filter(paciente_id=paciente.cpf)
-            .order_by("descricao")
+        prontuarios = list(
+            Prontuario.objects.filter(paciente_id=cpf)
+            .select_related("medico").order_by("-id_prontuario")
         )
-
-        # Pagamentos do próprio paciente
-        pagamentos = (
-            Pagamento.objects
-            .filter(agendamento__paciente_id=paciente.cpf)
-            .select_related(
-                "agendamento",
-                "status_pagamento"
-            )
+        alergias = list(Alergia.objects.filter(paciente_id=cpf).order_by("descricao"))
+        pagamentos = list(
+            Pagamento.objects.filter(agendamento__paciente_id=cpf)
+            .select_related("agendamento", "status_pagamento")
             .order_by("-data_pagamento", "-id_pagamento")
         )
 
-        context = {
+        return render(request, "dashboard.html", {
             "ativo": "dashboard",
             "mostrar_area_paciente": True,
             "paciente": paciente,
@@ -541,21 +517,12 @@ def dashboard(request):
             "prontuarios": prontuarios,
             "alergias": alergias,
             "pagamentos": pagamentos,
-
-            "total_consultas": agendamentos.filter(
-                tipo__iexact="Consulta"
-            ).count(),
-
-            "total_exames": agendamentos.filter(
-                tipo__iexact="Exame"
-            ).count(),
-
-            "total_prontuarios": prontuarios.count(),
-            "total_alergias": alergias.count(),
-            "total_pagamentos": pagamentos.count(),
-        }
-
-        return render(request, "dashboard.html", context)
+            "total_consultas": sum(1 for a in agendamentos if (a.tipo or "").lower() == "consulta"),
+            "total_exames": sum(1 for a in agendamentos if (a.tipo or "").lower() == "exame"),
+            "total_prontuarios": len(prontuarios),
+            "total_alergias": len(alergias),
+            "total_pagamentos": len(pagamentos),
+        })
 
     # ==========================================
     # PAINEL DOS DEMAIS PERFIS
@@ -1294,95 +1261,51 @@ def cadastro_publico(request):
 
 @login_requerido
 def detalhe_paciente(request, cpf):
-
     exigir(request, "pacientes", "ver")
+    perfil = request.session.get("perfil")
 
-    # Aplica o mesmo escopo utilizado na listagem de pacientes.
-    pacientes = aplicar_escopo(
-        request,
-        func_django.objects.all(),
-        RECURSOS["pacientes"]["escopo"]
+    paciente = get_object_or_404(pacientes_visiveis(request).select_related("medico"), cpf=cpf)
+
+    agendamentos = list(
+        Agendamento.objects.filter(paciente_id=cpf)
+        .select_related("medico", "status").order_by("-data_hora")
     )
-
-    paciente = get_object_or_404(pacientes, cpf=cpf)
-
-    # Consultas e exames do paciente.
-    agendamentos = (
-        Agendamento.objects
-        .filter(paciente_id=cpf)
-        .select_related("medico", "status")
-        .order_by("-data_hora")
+    prontuarios = list(
+        Prontuario.objects.filter(paciente_id=cpf)
+        .select_related("medico").order_by("-id_prontuario")
     )
+    alergias = list(Alergia.objects.filter(paciente_id=cpf).order_by("descricao"))
 
-    # Prontuários do paciente.
-    prontuarios = (
-        Prontuario.objects
-        .filter(paciente_id=cpf)
-        .select_related("medico")
-        .order_by("-id_prontuario")
-    )
-
-    # Alergias cadastradas.
-    alergias = (
-        Alergia.objects
-        .filter(paciente_id=cpf)
-        .order_by("descricao")
-    )
-
-    # Permissões para visualizar o financeiro.
-    permissoes_financeiro = acoes(request, "pagamentos")
-    pode_ver_financeiro = permissoes_financeiro.get("ver", False)
-
+    pode_ver_financeiro = "ver" in acoes_do_perfil(perfil, "pagamentos")
     pagamentos = []
-
     if pode_ver_financeiro:
-        pagamentos = (
-            Pagamento.objects
-            .filter(agendamento__paciente_id=cpf)
-            .select_related(
-                "agendamento",
-                "status_pagamento"
-            )
-            .order_by("-data_pagamento")
+        pagamentos = list(
+            Pagamento.objects.filter(agendamento__paciente_id=cpf)
+            .select_related("agendamento", "status_pagamento").order_by("-data_pagamento")
         )
 
-    context = {
+    return render(request, "paciente_detalhe.html", {
         "paciente": paciente,
         "agendamentos": agendamentos,
         "prontuarios": prontuarios,
         "alergias": alergias,
         "pagamentos": pagamentos,
         "pode_ver_financeiro": pode_ver_financeiro,
+        "pode_criar_alergia": "criar" in acoes_do_perfil(perfil, "pacientes"),
+        "total_consultas": sum(1 for a in agendamentos if (a.tipo or "").lower() == "consulta"),
+        "total_exames": sum(1 for a in agendamentos if (a.tipo or "").lower() == "exame"),
+        "total_prontuarios": len(prontuarios),
+        "total_alergias": len(alergias),
+    })
 
-        "total_consultas": agendamentos.filter(
-            tipo__iexact="Consulta"
-        ).count(),
 
-        "total_exames": agendamentos.filter(
-            tipo__iexact="Exame"
-        ).count(),
-
-        "total_prontuarios": prontuarios.count(),
-        "total_alergias": alergias.count(),
-    }
-
-    return render(
-        request,
-        "paciente_detalhe.html",
-        context
-    )
-    
 @login_requerido
 @require_POST
 def adicionar_alergia(request, cpf):
 
     exigir(request, "pacientes", "criar")
 
-    pacientes = aplicar_escopo(
-        request,
-        func_django.objects.all(),
-        RECURSOS["pacientes"]["escopo"]
-    )
+    pacientes = pacientes_visiveis(request)
 
     paciente = get_object_or_404(pacientes, cpf=cpf)
 
@@ -1413,11 +1336,7 @@ def excluir_alergia(request, cpf, pk):
 
     exigir(request, "pacientes", "excluir")
 
-    pacientes = aplicar_escopo(
-        request,
-        func_django.objects.all(),
-        RECURSOS["pacientes"]["escopo"]
-    )
+    pacientes = pacientes_visiveis(request)
 
     paciente = get_object_or_404(pacientes, cpf=cpf)
 
@@ -1432,4 +1351,3 @@ def excluir_alergia(request, cpf, pk):
     messages.success(request, "Alergia removida com sucesso.")
 
     return redirect("detalhe_paciente", cpf=cpf)
-

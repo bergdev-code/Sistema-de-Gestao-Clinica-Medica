@@ -1,22 +1,14 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="pt-br">
-
-    <script>
-    (function () {
-        try {
-            const tema = localStorage.getItem("temaClinica") || "light";
-            document.documentElement.setAttribute("data-theme", tema);
-        } catch (e) {
-            document.documentElement.setAttribute("data-theme", "light");
-        }
-    })();
-</script>
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Painel{% endblock %} | Sistema de Gestão Clínica</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
     <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
     <style>
@@ -45,13 +37,11 @@
     </style>
 
     <script>
+        /* Aplica o tema salvo antes da página aparecer (evita piscar). Uma única chave: temaSite */
         (function () {
-           try {
-             const tema = localStorage.getItem("temaSite") || "light";
-              document.documentElement.setAttribute("data-theme", tema);
-           } catch (e) {
-               document.documentElement.setAttribute("data-theme", "light");
-            }
+            var tema = "light";
+            try { tema = localStorage.getItem("temaSite") || localStorage.getItem("temaClinica") || "light"; } catch (e) {}
+            document.documentElement.setAttribute("data-theme", tema === "dark" ? "dark" : "light");
         })();
     </script>
 
@@ -99,39 +89,42 @@
 </header>
 
 <script>
+/* Botão de tema: alterna, salva e mantém o ícone certo em todas as telas */
 (function () {
-    const botao = document.getElementById("themeToggle");
+    var botao = document.getElementById("themeToggle");
     if (!botao) return;
+    var raiz = document.documentElement;
 
-    function atualizarBotao(tema) {
-        const escuro = tema === "dark";
-
-        botao.textContent = escuro ? "🌙" : "☀️";
-        botao.setAttribute(
-            "aria-label",
-            escuro ? "Ativar modo claro" : "Ativar modo escuro"
-        );
-        botao.title = escuro ? "Ativar modo claro" : "Ativar modo escuro";
+    function atual() { return raiz.getAttribute("data-theme") === "dark" ? "dark" : "light"; }
+    function atualizar() {
+        var escuro = atual() === "dark";
+        var rotulo = escuro ? "Ativar modo claro" : "Ativar modo escuro";
+        botao.textContent = escuro ? "\uD83C\uDF19" : "\u2600\uFE0F";
+        botao.setAttribute("aria-label", rotulo);
+        botao.setAttribute("aria-pressed", String(escuro));
+        botao.title = rotulo;
     }
-
-    function aplicarTema(tema) {
-        document.documentElement.setAttribute("data-theme", tema);
-
+    function salvar(tema) {
         try {
-            localStorage.setItem("temaClinica", tema);
+            localStorage.setItem("temaSite", tema);
+            localStorage.setItem("temaClinica", tema); /* compatibilidade com a chave antiga */
         } catch (e) {}
-
-        atualizarBotao(tema);
     }
 
-    const temaAtual =
-        document.documentElement.getAttribute("data-theme") || "light";
-
-    atualizarBotao(temaAtual);
-
+    atualizar();
     botao.addEventListener("click", function () {
-        const tema = document.documentElement.getAttribute("data-theme");
-        aplicarTema(tema === "dark" ? "light" : "dark");
+        var novo = atual() === "dark" ? "light" : "dark";
+        raiz.setAttribute("data-theme", novo);
+        salvar(novo);
+        atualizar();
+    });
+
+    /* se o tema mudar em outra aba, acompanha */
+    window.addEventListener("storage", function (e) {
+        if (e.key === "temaSite" && (e.newValue === "dark" || e.newValue === "light")) {
+            raiz.setAttribute("data-theme", e.newValue);
+            atualizar();
+        }
     });
 })();
 </script>
@@ -189,53 +182,7 @@
     })();
     </script>
 
-    <script>
-(function () {
-    const botao = document.getElementById("themeToggle");
-    const icone = document.getElementById("themeIcon");
-
-    if (!botao || !icone) return;
-
-    function aplicarTema(tema) {
-        document.documentElement.setAttribute("data-theme", tema);
-
-        const escuro = tema === "dark";
-
-        icone.textContent = escuro ? "☀️" : "🌙";
-
-        botao.setAttribute(
-            "aria-label",
-            escuro ? "Ativar modo claro" : "Ativar modo escuro"
-        );
-
-        botao.setAttribute(
-            "title",
-            escuro ? "Ativar modo claro" : "Ativar modo escuro"
-        );
-
-        botao.setAttribute("aria-pressed", String(escuro));
-    }
-
-    let temaAtual = "light";
-
-    try {
-        temaAtual = localStorage.getItem("temaSite") || "light";
-    } catch (e) {}
-
-    aplicarTema(temaAtual);
-
-    botao.addEventListener("click", function () {
-        const temaAtual = document.documentElement.getAttribute("data-theme");
-        const novoTema = temaAtual === "dark" ? "light" : "dark";
-
-        aplicarTema(novoTema);
-
-        try {
-            localStorage.setItem("temaSite", novoTema);
-        } catch (e) {}
-    });
-})();
-</script>
+    
 
 </body>
 </html>
