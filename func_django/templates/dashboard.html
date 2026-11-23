@@ -30,262 +30,243 @@
             <p>Bem-vindo à sua área do paciente.</p>
         </section>
 
-        <!-- DADOS PESSOAIS -->
-        <section class="dashboard-card" style="margin-top: 20px;">
-            <h2>Meus dados pessoais</h2>
+        <!-- CONTAINER DOS PAINÉIS -->
+        <div class="dashboard-cards">
 
-            <div class="info-item">
-                <span>Nome completo:</span>
-                <strong>{{ paciente.nome }}</strong>
-            </div>
-
-            <div class="info-item">
-                <span>CPF:</span>
-                <strong>{{ paciente.cpf }}</strong>
-            </div>
-
-            <div class="info-item">
-                <span>Telefone:</span>
-                <strong>{{ paciente.telefone|default:"Não informado" }}</strong>
-            </div>
-
-            <div class="info-item">
-                <span>Data de nascimento:</span>
-                <strong>
-                    {{ paciente.data_nascimento|date:"d/m/Y"|default:"Não informada" }}
-                </strong>
-            </div>
-        </section>
-
-        <!-- RESUMO -->
-        <section class="atalhos" style="margin-top: 20px;">
-
-            <div class="atalho">
-                <strong>{{ total_consultas }}</strong>
-                <span>Consultas</span>
-            </div>
-
-            <div class="atalho">
-                <strong>{{ total_exames }}</strong>
-                <span>Exames</span>
-            </div>
-
-            <div class="atalho">
-                <strong>{{ total_prontuarios }}</strong>
-                <span>Prontuários</span>
-            </div>
-
-            <div class="atalho">
-                <strong>{{ total_alergias }}</strong>
-                <span>Alergias</span>
-            </div>
-
-        </section>
-
-        <!-- PRÓXIMO ATENDIMENTO -->
-        <section class="dashboard-card" style="margin-top: 20px;">
-
-            <h2>Meu próximo atendimento</h2>
-
-            {% if proxima_consulta %}
+            <!-- DADOS PESSOAIS -->
+            <section class="dashboard-card">
+                <h2>Meus dados pessoais</h2>
 
                 <div class="info-item">
-                    <span>Tipo:</span>
-                    <strong>{{ proxima_consulta.tipo }}</strong>
+                    <span>Nome completo:</span>
+                    <strong>{{ paciente.nome }}</strong>
                 </div>
 
                 <div class="info-item">
-                    <span>Data e hora:</span>
+                    <span>CPF:</span>
+                    <strong>{{ paciente.cpf }}</strong>
+                </div>
+
+                <div class="info-item">
+                    <span>Telefone:</span>
+                    <strong>{{ paciente.telefone|default:"Não informado" }}</strong>
+                </div>
+
+                <div class="info-item">
+                    <span>Data de nascimento:</span>
                     <strong>
-                        {{ proxima_consulta.data_hora|date:"d/m/Y H:i" }}
+                        {{ paciente.data_nascimento|date:"d/m/Y"|default:"Não informada" }}
                     </strong>
                 </div>
+            </section>
 
-                <div class="info-item">
-                    <span>Médico:</span>
-                    <strong>{{ proxima_consulta.medico.nome }}</strong>
-                </div>
+            <!-- PRÓXIMO ATENDIMENTO -->
+            <section class="dashboard-card">
 
-                <div class="info-item">
-                    <span>Status:</span>
-                    <strong>{{ proxima_consulta.status.descricao }}</strong>
-                </div>
+                <h2>Meu próximo atendimento</h2>
 
-            {% else %}
-
-                <p>Você não possui atendimentos futuros confirmados.</p>
-
-            {% endif %}
-
-            <p style="margin-top: 16px;">
-                <a class="btn btn-primary"
-                   href="{% url 'solicitar_consulta' %}">
-                    Solicitar consulta ou exame
-                </a>
-            </p>
-
-        </section>
-
-        <!-- ALERGIAS -->
-        <section class="dashboard-card" style="margin-top: 20px;">
-
-            <h2>Minhas alergias</h2>
-
-            {% if alergias %}
-
-                {% for alergia in alergias %}
+                {% if proxima_consulta %}
 
                     <div class="info-item">
-                        <span>Alergia:</span>
-                        <strong>{{ alergia.descricao }}</strong>
+                        <span>Tipo:</span>
+                        <strong>{{ proxima_consulta.tipo }}</strong>
                     </div>
 
-                {% endfor %}
-
-            {% else %}
-
-                <p>Nenhuma alergia cadastrada.</p>
-
-            {% endif %}
-
-        </section>
-
-        <!-- HISTÓRICO DE CONSULTAS -->
-        <section class="dashboard-card" style="margin-top: 20px;">
-
-            <h2>Histórico de consultas e exames</h2>
-
-            {% if agendamentos %}
-
-                <div class="table-scroll">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Tipo</th>
-                                <th>Médico</th>
-                                <th>Data e hora</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            {% for ag in agendamentos %}
-
-                                <tr>
-                                    <td>{{ ag.tipo }}</td>
-                                    <td>{{ ag.medico.nome }}</td>
-                                    <td>
-                                        {{ ag.data_hora|date:"d/m/Y H:i" }}
-                                    </td>
-                                    <td>{{ ag.status.descricao }}</td>
-                                </tr>
-
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-
-            {% else %}
-
-                <p>Você ainda não possui consultas ou exames registrados.</p>
-
-            {% endif %}
-
-        </section>
-
-        <!-- PRONTUÁRIOS -->
-        <section class="dashboard-card" style="margin-top: 20px;">
-
-            <h2>Meu histórico médico</h2>
-
-            {% if prontuarios %}
-
-                {% for prontuario in prontuarios %}
+                    <div class="info-item">
+                        <span>Data e hora:</span>
+                        <strong>
+                            {{ proxima_consulta.data_hora|date:"d/m/Y H:i" }}
+                        </strong>
+                    </div>
 
                     <div class="info-item">
                         <span>Médico:</span>
-                        <strong>{{ prontuario.medico.nome }}</strong>
+                        <strong>{{ proxima_consulta.medico.nome }}</strong>
                     </div>
 
                     <div class="info-item">
-                        <span>Anamnese:</span>
-                        <strong>{{ prontuario.anamnese|default:"Não informada" }}</strong>
+                        <span>Status:</span>
+                        <strong>{{ proxima_consulta.status.descricao }}</strong>
                     </div>
 
-                    <div class="info-item">
-                        <span>Diagnóstico:</span>
-                        <strong>{{ prontuario.diagnostico|default:"Não informado" }}</strong>
-                    </div>
+                {% else %}
 
-                    <div class="info-item">
-                        <span>Prescrição:</span>
-                        <strong>{{ prontuario.prescricao|default:"Não informada" }}</strong>
-                    </div>
+                    <p>Você não possui atendimentos futuros confirmados.</p>
 
-                    {% if not forloop.last %}
-                        <hr>
-                    {% endif %}
+                {% endif %}
 
-                {% endfor %}
+                <p style="margin-top: 16px;">
+                    <a class="btn btn-primary"
+                       href="{% url 'solicitar_consulta' %}">
+                        Solicitar consulta ou exame
+                    </a>
+                </p>
 
-            {% else %}
+            </section>
 
-                <p>Nenhum prontuário disponível.</p>
+            <!-- ALERGIAS -->
+            <section class="dashboard-card">
 
-            {% endif %}
+                <h2>Minhas alergias</h2>
 
-        </section>
+                {% if alergias %}
 
-        <!-- PAGAMENTOS -->
-        <section class="dashboard-card" style="margin-top: 20px;">
+                    {% for alergia in alergias %}
 
-            <h2>Meus pagamentos</h2>
+                        <div class="info-item">
+                            <span>Alergia:</span>
+                            <strong>{{ alergia.descricao }}</strong>
+                        </div>
 
-            {% if pagamentos %}
+                    {% endfor %}
 
-                <div class="table-scroll">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Descrição</th>
-                                <th>Valor</th>
-                                <th>Forma</th>
-                                <th>Status</th>
-                                <th>Data</th>
-                            </tr>
-                        </thead>
+                {% else %}
 
-                        <tbody>
-                            {% for pagamento in pagamentos %}
+                    <p>Nenhuma alergia cadastrada.</p>
 
+                {% endif %}
+
+            </section>
+
+            <!-- HISTÓRICO DE CONSULTAS -->
+            <section class="dashboard-card">
+
+                <h2>Histórico de consultas e exames</h2>
+
+                {% if agendamentos %}
+
+                    <div class="table-scroll">
+                        <table>
+                            <thead>
                                 <tr>
-                                    <td>{{ pagamento.descricao }}</td>
-                                    <td>R$ {{ pagamento.valor|floatformat:2 }}</td>
-                                    <td>{{ pagamento.forma_pagamento }}</td>
-                                    <td>{{ pagamento.status_pagamento.descricao }}</td>
-                                    <td>
-                                        {{ pagamento.data_pagamento|date:"d/m/Y" }}
-                                    </td>
+                                    <th>Tipo</th>
+                                    <th>Médico</th>
+                                    <th>Data e hora</th>
+                                    <th>Status</th>
                                 </tr>
+                            </thead>
 
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                            <tbody>
+                                {% for ag in agendamentos %}
 
-            {% else %}
+                                    <tr>
+                                        <td>{{ ag.tipo }}</td>
+                                        <td>{{ ag.medico.nome }}</td>
+                                        <td>
+                                            {{ ag.data_hora|date:"d/m/Y H:i" }}
+                                        </td>
+                                        <td>{{ ag.status.descricao }}</td>
+                                    </tr>
 
-                <p>Você ainda não possui pagamentos registrados.</p>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
 
-            {% endif %}
+                {% else %}
 
-            <p style="margin-top: 16px;">
-                <a class="btn btn-primary" href="{% url 'financeiro' %}">
-                    Acessar financeiro
-                </a>
-            </p>
+                    <p>Você ainda não possui consultas ou exames registrados.</p>
 
-        </section>
+                {% endif %}
+
+            </section>
+
+            <!-- PRONTUÁRIOS -->
+            <section class="dashboard-card">
+
+                <h2>Meu histórico médico</h2>
+
+                {% if prontuarios %}
+
+                    {% for prontuario in prontuarios %}
+
+                        <div class="info-item">
+                            <span>Médico:</span>
+                            <strong>{{ prontuario.medico.nome }}</strong>
+                        </div>
+
+                        <div class="info-item">
+                            <span>Anamnese:</span>
+                            <strong>{{ prontuario.anamnese|default:"Não informada" }}</strong>
+                        </div>
+
+                        <div class="info-item">
+                            <span>Diagnóstico:</span>
+                            <strong>{{ prontuario.diagnostico|default:"Não informado" }}</strong>
+                        </div>
+
+                        <div class="info-item">
+                            <span>Prescrição:</span>
+                            <strong>{{ prontuario.prescricao|default:"Não informada" }}</strong>
+                        </div>
+
+                        {% if not forloop.last %}
+                            <hr>
+                        {% endif %}
+
+                    {% endfor %}
+
+                {% else %}
+
+                    <p>Nenhum prontuário disponível.</p>
+
+                {% endif %}
+
+            </section>
+
+            <!-- PAGAMENTOS -->
+            <section class="dashboard-card">
+
+                <h2>Meus pagamentos</h2>
+
+                {% if pagamentos %}
+
+                    <div class="table-scroll">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Descrição</th>
+                                    <th>Valor</th>
+                                    <th>Forma</th>
+                                    <th>Status</th>
+                                    <th>Data</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                {% for pagamento in pagamentos %}
+
+                                    <tr>
+                                        <td>{{ pagamento.descricao }}</td>
+                                        <td>R$ {{ pagamento.valor|floatformat:2 }}</td>
+                                        <td>{{ pagamento.forma_pagamento }}</td>
+                                        <td>{{ pagamento.status_pagamento.descricao }}</td>
+                                        <td>
+                                            {{ pagamento.data_pagamento|date:"d/m/Y" }}
+                                        </td>
+                                    </tr>
+
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                {% else %}
+
+                    <p>Você ainda não possui pagamentos registrados.</p>
+
+                {% endif %}
+
+                <p style="margin-top: 16px;">
+                    <a class="btn btn-primary" href="{% url 'financeiro' %}">
+                        Acessar financeiro
+                    </a>
+                </p>
+
+            </section>
+
+        </div>
+        <!-- FIM DOS PAINÉIS -->
 
     {% endif %}
 
@@ -298,9 +279,13 @@
         <p>Você está no painel do Sistema de Gestão Clínica.</p>
     </section>
 
+    
+<div class="dashboard-cards">
+
     {% if consultas_hoje is not None %}
-        <section class="dashboard-card" style="margin-top: 20px;">
+        <section class="dashboard-card">
             <h2>Seu dia</h2>
+
             <div class="info-item">
                 <span>Consultas agendadas para hoje:</span>
                 <strong>{{ consultas_hoje }}</strong>
@@ -309,8 +294,45 @@
     {% endif %}
 
     {% if solicitacoes_pendentes is not None %}
+        <section class="dashboard-card">
+            <h2>Solicitações de consulta</h2>
+
+            <div class="info-item">
+                <span>Aguardando resposta:</span>
+                <strong>{{ solicitacoes_pendentes }}</strong>
+            </div>
+
+            <p style="margin-top: 16px;">
+                <a class="btn btn-primary"
+                   href="{% url 'lista' 'consultas' %}">
+                    Ver consultas
+                </a>
+            </p>
+        </section>
+    {% endif %}
+
+</div>
+
+{% if atalhos %}
+    <section class="atalhos" aria-label="Acesso rápido">
+        {% for a in atalhos %}
+            <a class="atalho" href="{{ a.url }}">
+                {{ a.titulo }}
+            </a>
+        {% endfor %}
+    </section>
+{% else %}
+    <div class="alert alert-warning" style="margin-top: 20px;">
+        Nenhuma tela está liberada para o perfil "{{ request.session.perfil }}".
+        Peça ao administrador para conferir o nome do perfil.
+    </div>
+{% endif %}
+
+
+    {% if solicitacoes_pendentes is not None %}
         <section class="dashboard-card" style="margin-top: 20px;">
             <h2>Solicitações de consulta</h2>
+
             <div class="info-item">
                 <span>Aguardando resposta:</span>
                 <strong>{{ solicitacoes_pendentes }}</strong>

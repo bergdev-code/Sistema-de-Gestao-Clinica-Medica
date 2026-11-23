@@ -132,6 +132,22 @@ body {
     text-align: right;
 }
 
+/* ORGANIZAÇÃO DOS CARDS */
+
+.dashboard-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    width: 100%;
+    align-items: start;
+}
+
+.dashboard-card {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+}
+
 /* RESPONSIVIDADE */
 
 @media (max-width: 600px) {
@@ -156,5 +172,188 @@ body {
 
     .dashboard-card {
         padding: 20px;
+    }
+
+    .dashboard-cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* PAINÉIS DA ÁREA DO PACIENTE */
+
+.dashboard-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    width: 100%;
+    align-items: stretch;
+}
+
+.dashboard-cards .dashboard-card {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    margin-top: 0 !important;
+}
+
+
+/* ÁREA DA CONTA */
+
+.account-container {
+    width: 100%;
+}
+
+.account-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    align-items: stretch;
+}
+
+.account-grid .dashboard-card {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    height: 100%;
+}
+
+.account-grid h2 {
+    margin-bottom: 24px;
+}
+
+/* FORMULÁRIOS */
+
+.account-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-group label {
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 13px 14px;
+    border: 1px solid #334155;
+    border-radius: 7px;
+    background: #0f172a;
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: 0.2s;
+}
+
+.form-group input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.account-description {
+    color: #94a3b8;
+    font-size: 13px;
+    margin-bottom: 20px;
+    line-height: 1.6;
+}
+
+/* MENSAGENS */
+
+.account-message {
+    padding: 13px 16px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.account-message.success {
+    background: #14532d;
+    color: #dcfce7;
+}
+
+.account-message.error {
+    background: #7f1d1d;
+    color: #fee2e2;
+}
+
+/* RESPONSIVIDADE */
+
+@media (max-width: 850px) {
+    .account-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dashboard-cards {
+    grid-template-columns: 1fr;
+}
+
+/* PAINÉIS DO DASHBOARD */
+.dashboard-cards {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 24px;
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box;
+    align-items: stretch;
+}
+
+.dashboard-cards > .dashboard-card {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    height: 100%;
+    margin: 0 !important;
+    box-sizing: border-box;
+}
+
+/* Tabelas dentro dos painéis */
+.dashboard-card .table-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* Em telas menores, um painel por linha */
+@media (max-width: 600px) {
+    .dashboard-cards {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+}
+
+/* PAINÉIS DO DASHBOARD */
+.dashboard-cards {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 24px;
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+    align-items: stretch;
+}
+
+.dashboard-cards > .dashboard-card {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    height: 100%;
+    margin: 0 !important;
+    box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+    .dashboard-cards {
+        grid-template-columns: 1fr !important;
     }
 }

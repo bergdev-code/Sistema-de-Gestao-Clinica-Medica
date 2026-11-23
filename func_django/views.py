@@ -455,116 +455,113 @@ def logout_view(request):
 
 @login_requerido
 def conta(request):
-    return render(request, "conta.html", {"ativo": "conta"})
+    username_sessao = request.session.get("username", "")
+    email_sessao = request.session.get("email", "")
 
-
-@login_requerido
-
-@login_requerido
-def dashboard(request):
-    perfil = request.session.get("perfil")
-    eh_paciente = chave_perfil(perfil) == _n(PERFIL_PACIENTE)
-
-    # ==========================================
-    # ÁREA EXCLUSIVA DO PACIENTE
-    # ==========================================
-    if eh_paciente:
-        usuario = (
-            Usuario.objects.select_related("paciente")
-            .filter(username=request.session.get("username"))
-            .first()
+    # Localiza a conta pelo usuário ou pelo e-mail da sessão
+    usuario = (
+        Usuario.objects
+        .select_related("id_perfil", "paciente", "medico")
+        .filter(
+            Q(username__iexact=username_sessao) |
+            Q(email__iexact=email_sessao)
         )
-        paciente = usuario.paciente if usuario else None
+        .first()
+    )
 
-        if paciente is None:
-            return render(request, "dashboard.html", {
-                "ativo": "dashboard",
-                "mostrar_area_paciente": True,
-                "paciente_nao_vinculado": True,
-            })
-
-        cpf = paciente.cpf
-        agora = timezone.now()
-
-        # cada lista é buscada UMA vez; contagens e "próxima consulta" saem da memória
-        agendamentos = list(
-            Agendamento.objects.filter(paciente_id=cpf)
-            .select_related("medico", "status").order_by("-data_hora")
+    if not usuario:
+        messages.error(
+            request,
+            "Não foi possível localizar sua conta no banco de dados."
         )
-        proxima_consulta = next(
-            (a for a in reversed(agendamentos)
-             if a.data_hora >= agora
-             and not eh_status(a, NOMES_SOLICITADA) and not eh_status(a, NOMES_CANCELADA)),
-            None,
-        )
-        prontuarios = list(
-            Prontuario.objects.filter(paciente_id=cpf)
-            .select_related("medico").order_by("-id_prontuario")
-        )
-        alergias = list(Alergia.objects.filter(paciente_id=cpf).order_by("descricao"))
-        pagamentos = list(
-            Pagamento.objects.filter(agendamento__paciente_id=cpf)
-            .select_related("agendamento", "status_pagamento")
-            .order_by("-data_pagamento", "-id_pagamento")
-        )
+        return redirect("login")
 
-        return render(request, "dashboard.html", {
-            "ativo": "dashboard",
-            "mostrar_area_paciente": True,
-            "paciente": paciente,
-            "proxima_consulta": proxima_consulta,
-            "agendamentos": agendamentos,
-            "prontuarios": prontuarios,
-            "alergias": alergias,
-            "pagamentos": pagamentos,
-            "total_consultas": sum(1 for a in agendamentos if (a.tipo or "").lower() == "consulta"),
-            "total_exames": sum(1 for a in agendamentos if (a.tipo or "").lower() == "exame"),
-            "total_prontuarios": len(prontuarios),
-            "total_alergias": len(alergias),
-            "total_pagamentos": len(pagamentos),
-        })
+    if request.method == "POST":
+        acao = request.POST.get("acao")
 
-    # ==========================================
-    # PAINEL DOS DEMAIS PERFIS
-    # ==========================================
-    atalhos = []
+        # ALTERAR DADOS DA CONTA
+        if acao == "dados":
+            username = request.POST.get("username", "").strip()
+            email = request.POST.get("email", "").strip().lower()
 
-    for rec, cfg in RECURSOS.items():
-        if "ver" in acoes_do_perfil(perfil, rec):
-            url = (
-                reverse("financeiro")
-                if rec == "pagamentos"
-                else reverse("lista", args=[rec])
-            )
-            atalhos.append({
-                "titulo": cfg["titulo"],
-                "url": url
-            })
+            if not username or not email:
+                messages.error(request, "Preencha todos os campos.")
+                return redirect("conta")
 
-    consultas_hoje = None
-    crm = request.session.get("crm")
+            if len(username) > 10:
+                messages.error(request, "O nome de usuário deve ter no máximo 10 caracteres.")
+                return redirect("conta")
 
-    if chave_perfil(perfil) == _n(PERFIL_MEDICO) and crm:
-        consultas_hoje = Agendamento.objects.filter(
-            medico=crm,
-            data_hora__date=timezone.localdate()
-        ).count()
+            if len(email) > 50 or not validar_email(email):
+                messages.error(request, "Informe um e-mail válido.")
+                return redirect("conta")
 
-    solicitacoes_pendentes = None
+            if Usuario.objects.exclude(pk=usuario.pk).filter(
+                username__iexact=username
+            ).exists():
+                messages.error(request, "Esse nome de usuário já está sendo utilizado.")
+                return redirect("conta")
 
-    if "aceitar" in acoes_do_perfil(perfil, "consultas"):
-        solicitacoes_pendentes = (
-            Agendamento.objects
-            .filter(filtro_status(NOMES_SOLICITADA))
-            .count()
-        )
+            if Usuario.objects.exclude(pk=usuario.pk).filter(
+                email__iexact=email
+            ).exists():
+                messages.error(request, "Esse e-mail já está cadastrado.")
+                return redirect("conta")
 
-    return render(request, "dashboard.html", {
-        "ativo": "dashboard",
-        "atalhos": atalhos,
-        "consultas_hoje": consultas_hoje,
-        "mostrar_proxima": False,
-        "solicitacoes_pendentes": solicitacoes_pendentes,
+            usuario.username = username
+            usuario.email = email
+            usuario.save(update_fields=["username", "email"])
+
+            request.session["username"] = username
+            request.session["email"] = email
+
+            messages.success(request, "Dados da conta atualizados com sucesso!")
+            return redirect("conta")
+
+        # ALTERAR SENHA
+        elif acao == "senha":
+            senha_atual = request.POST.get("senha_atual", "")
+            senha_nova = request.POST.get("senha_nova", "")
+            confirmar_senha = request.POST.get("confirmar_senha", "")
+
+            if not senha_atual or not senha_nova or not confirmar_senha:
+                messages.error(request, "Preencha todos os campos.")
+                return redirect("conta")
+
+            if not senha_confere(usuario, senha_atual):
+                messages.error(request, "A senha atual está incorreta.")
+                return redirect("conta")
+
+            if len(senha_nova) < 8:
+                messages.error(request, "A nova senha deve ter pelo menos 8 caracteres.")
+                return redirect("conta")
+
+            if senha_nova != confirmar_senha:
+                messages.error(request, "A confirmação da senha não corresponde.")
+                return redirect("conta")
+
+            if senha_atual == senha_nova:
+                messages.error(request, "A nova senha deve ser diferente da atual.")
+                return redirect("conta")
+
+            salt = secrets.token_bytes(16)
+
+            usuario.salt = salt.hex()
+            usuario.senha_hash = hashlib.pbkdf2_hmac(
+                "sha256",
+                senha_nova.encode("utf-8"),
+                salt,
+                ITERACOES
+            ).hex()
+
+            usuario.save(update_fields=["salt", "senha_hash"])
+
+            messages.success(request, "Sua senha foi alterada com sucesso!")
+            return redirect("conta")
+
+    return render(request, "conta.html", {
+        "ativo": "conta",
+        "usuario": usuario,
     })
 
 
@@ -1219,28 +1216,26 @@ def cadastro_publico(request):
     ).hex()
 
     try:
-        
         with transaction.atomic():
 
-    # Cria os dados pessoais do paciente.
+            # Cria os dados pessoais do paciente.
             paciente = func_django.objects.create(
-            cpf=cpf,
-            nome=nome,
-            telefone=telefone,
-            data_nascimento=data_nascimento,
-        )
+                cpf=cpf,
+                nome=nome,
+                telefone=telefone,
+                data_nascimento=data_nascimento,
+            )
 
-    # Cria a conta já vinculada ao paciente.
-        usuario = Usuario.objects.create(
-            username=username,
-            email=email,
-            senha_hash=senha_hash,
-            salt=salt.hex(),
-            id_perfil=perfil,
-            paciente_id=paciente.cpf,
-            medico=None,
-       )
-
+            # Cria a conta vinculada ao paciente.
+            Usuario.objects.create(
+                username=username,
+                email=email,
+                senha_hash=senha_hash,
+                salt=salt.hex(),
+                id_perfil=perfil,
+                paciente=paciente,
+                medico=None,
+            )
 
     except IntegrityError:
         return retornar_erro(
@@ -1264,7 +1259,10 @@ def detalhe_paciente(request, cpf):
     exigir(request, "pacientes", "ver")
     perfil = request.session.get("perfil")
 
-    paciente = get_object_or_404(pacientes_visiveis(request).select_related("medico"), cpf=cpf)
+    paciente = get_object_or_404(
+        pacientes_visiveis(request),
+        cpf=cpf
+    )
 
     agendamentos = list(
         Agendamento.objects.filter(paciente_id=cpf)
@@ -1339,7 +1337,7 @@ def excluir_alergia(request, cpf, pk):
     pacientes = pacientes_visiveis(request)
 
     paciente = get_object_or_404(pacientes, cpf=cpf)
-
+    
     alergia = get_object_or_404(
         Alergia,
         id_alergias=pk,
@@ -1351,3 +1349,136 @@ def excluir_alergia(request, cpf, pk):
     messages.success(request, "Alergia removida com sucesso.")
 
     return redirect("detalhe_paciente", cpf=cpf)
+
+
+@login_requerido
+def dashboard(request):
+    perfil = request.session.get("perfil")
+    perfil_chave = chave_perfil(perfil)
+
+    contexto = {
+        "ativo": "dashboard",
+        "perfil": perfil,
+        "mostrar_area_paciente": False,
+        "paciente_nao_vinculado": False,
+        "paciente": None,
+        "agendamentos": [],
+        "proxima_consulta": None,
+        "prontuarios": [],
+        "alergias": [],
+        "pagamentos": [],
+        "consultas_hoje": 0,
+        "solicitacoes_pendentes": None,
+        "atalhos": [],
+        "total_pacientes": 0,
+        "total_medicos": 0,
+        "total_consultas": 0,
+    }
+
+    # --------------------------------------------------
+    # ÁREA DO PACIENTE
+    # --------------------------------------------------
+    if perfil_chave == _n(PERFIL_PACIENTE):
+
+        contexto["mostrar_area_paciente"] = True
+
+        cpf = cpf_da_sessao(request)
+
+        paciente = (
+            func_django.objects.filter(cpf=cpf).first()
+            if cpf else None
+        )
+
+        if not paciente:
+            contexto["paciente_nao_vinculado"] = True
+            return render(request, "dashboard.html", contexto)
+
+        agendamentos = (
+            Agendamento.objects
+            .filter(paciente=paciente)
+            .select_related("medico", "status")
+            .order_by("-data_hora")
+        )
+
+        prontuarios = (
+            Prontuario.objects
+            .filter(paciente=paciente)
+            .select_related("medico")
+            .order_by("-id_prontuario")
+        )
+
+        alergias = (
+            Alergia.objects
+            .filter(paciente=paciente)
+            .order_by("descricao")
+        )
+
+        pagamentos = (
+            Pagamento.objects
+            .filter(agendamento__paciente=paciente)
+            .select_related("agendamento", "status_pagamento")
+            .order_by("-data_pagamento")
+        )
+
+        proxima_consulta = (
+            agendamentos
+            .filter(data_hora__gte=timezone.now())
+            .exclude(filtro_status(NOMES_CANCELADA))
+            .exclude(filtro_status(NOMES_SOLICITADA))
+            .order_by("data_hora")
+            .first()
+        )
+
+        contexto.update({
+            "paciente": paciente,
+            "agendamentos": agendamentos,
+            "consultas": agendamentos,
+            "proxima_consulta": proxima_consulta,
+            "prontuarios": prontuarios,
+            "alergias": alergias,
+            "pagamentos": pagamentos,
+        })
+
+        return render(request, "dashboard.html", contexto)
+
+    # --------------------------------------------------
+    # ÁREA DO MÉDICO
+    # --------------------------------------------------
+    if perfil_chave == _n(PERFIL_MEDICO):
+
+        crm = request.session.get("crm")
+
+        consultas = (
+            Agendamento.objects
+            .filter(medico_id=crm)
+            .select_related("paciente", "status")
+            .order_by("data_hora")
+        )
+
+        hoje = timezone.localdate()
+
+        contexto.update({
+            "consultas": consultas,
+            "consultas_hoje": consultas.filter(
+                data_hora__date=hoje
+            ).count(),
+            "total_consultas": consultas.count(),
+        })
+
+    # --------------------------------------------------
+    # ADMINISTRADOR E RECEPCIONISTA
+    # --------------------------------------------------
+    else:
+
+        contexto.update({
+            "total_pacientes": func_django.objects.count(),
+            "total_medicos": Medico.objects.filter(ativo=True).count(),
+            "total_consultas": Agendamento.objects.count(),
+            "solicitacoes_pendentes": (
+                Agendamento.objects
+                .filter(filtro_status(NOMES_SOLICITADA))
+                .count()
+            ),
+        })
+
+    return render(request, "dashboard.html", contexto)

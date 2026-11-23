@@ -1,25 +1,178 @@
+
 {% extends 'base.html' %}
-{% block title %}Minha conta{% endblock %}
+
+{% block title %}
+    Minha conta
+{% endblock %}
 
 {% block content %}
-<div class="page-head">
-    <h1>Minha conta</h1>
+
+<div class="account-container">
+
+    <section class="welcome-section">
+        <h1>Minha conta</h1>
+        <p>Gerencie suas informações e configurações de acesso.</p>
+    </section>
+
+    <!-- MENSAGENS -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="account-message {{ message.tags }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    {% if usuario %}
+
+        <div class="account-grid">
+
+            <!-- INFORMAÇÕES DA CONTA -->
+            <section class="dashboard-card">
+
+                <h2>Informações da conta</h2>
+
+                <div class="info-item">
+                    <span>Usuário:</span>
+                    <strong>{{ usuario.username }}</strong>
+                </div>
+
+                <div class="info-item">
+                    <span>E-mail:</span>
+                    <strong>{{ usuario.email }}</strong>
+                </div>
+
+                <div class="info-item">
+                    <span>Perfil:</span>
+                    <strong>{{ usuario.id_perfil.nome_perfil|default:"Não informado" }}</strong>
+                </div>
+
+                {% if usuario.paciente_id %}
+                    <div class="info-item">
+                        <span>Paciente vinculado:</span>
+                        <strong>{{ usuario.paciente.nome|default:"Nome não informado" }}</strong>
+                    </div>
+                {% endif %}
+
+                {% if usuario.medico_id %}
+                    <div class="info-item">
+                        <span>Médico vinculado:</span>
+                        <strong>{{ usuario.medico.nome|default:"Nome não informado" }}</strong>
+                    </div>
+                {% endif %}
+
+            </section>
+
+            <!-- EDITAR DADOS DA CONTA -->
+            <section class="dashboard-card">
+
+                <h2>Editar dados da conta</h2>
+
+                <form method="POST" class="account-form">
+                    {% csrf_token %}
+
+                    <input type="hidden" name="acao" value="dados">
+
+                    <div class="form-group">
+                        <label for="username">Nome de usuário</label>
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            value="{{ usuario.username }}"
+                            maxlength="10"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">E-mail</label>
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            value="{{ usuario.email }}"
+                            maxlength="50"
+                            required
+                        >
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        Salvar alterações
+                    </button>
+
+                </form>
+
+            </section>
+
+            <!-- SEGURANÇA DA CONTA -->
+            <section class="dashboard-card">
+
+                <h2>Segurança da conta</h2>
+
+                <p class="account-description">
+                    Altere sua senha periodicamente para manter sua conta protegida.
+                </p>
+
+                <form method="POST" class="account-form">
+                    {% csrf_token %}
+
+                    <input type="hidden" name="acao" value="senha">
+
+                    <div class="form-group">
+                        <label for="senha_atual">Senha atual</label>
+                        <input
+                            type="password"
+                            id="senha_atual"
+                            name="senha_atual"
+                            autocomplete="current-password"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="senha_nova">Nova senha</label>
+                        <input
+                            type="password"
+                            id="senha_nova"
+                            name="senha_nova"
+                            minlength="8"
+                            autocomplete="new-password"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirmar_senha">Confirmar nova senha</label>
+                        <input
+                            type="password"
+                            id="confirmar_senha"
+                            name="confirmar_senha"
+                            minlength="8"
+                            autocomplete="new-password"
+                            required
+                        >
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        Alterar senha
+                    </button>
+
+                </form>
+
+            </section>
+
+        </div>
+
+    {% else %}
+
+        <section class="dashboard-card">
+            <h2>Não foi possível carregar sua conta</h2>
+            <p>Não encontramos os dados do usuário autenticado. Tente entrar novamente no sistema.</p>
+        </section>
+
+    {% endif %}
+
 </div>
 
-<section class="dashboard-card">
-    <h2>Informações da conta</h2>
-
-    <div class="info-item">
-        <span>Usuário:</span>
-        <strong>{{ request.session.username }}</strong>
-    </div>
-    <div class="info-item">
-        <span>E-mail:</span>
-        <strong>{{ request.session.email|default:"—" }}</strong>
-    </div>
-    <div class="info-item">
-        <span>Perfil:</span>
-        <strong>{{ request.session.perfil }}</strong>
-    </div>
-</section>
 {% endblock %}
