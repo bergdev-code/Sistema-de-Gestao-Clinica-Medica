@@ -7,6 +7,5 @@ def conectar():
         passwd="",
         db="",
         port=
-    )
 
     return conexao

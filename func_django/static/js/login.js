@@ -15,13 +15,21 @@
     }
 
     let savedTheme = "light";
-    try { savedTheme = localStorage.getItem("clinica-theme") || "light"; } catch (_) {}
+    // mesma chave do painel (temaSite): o tema escolhido vale no login, no cadastro e no sistema
+    try {
+        savedTheme = localStorage.getItem("temaSite") || localStorage.getItem("temaClinica")
+            || localStorage.getItem("clinica-theme") || "light";
+    } catch (_) {}
     applyTheme(savedTheme);
 
     themeToggle?.addEventListener("click", () => {
         const next = root.dataset.theme === "dark" ? "light" : "dark";
         applyTheme(next);
-        try { localStorage.setItem("clinica-theme", next); } catch (_) {}
+        try {
+            localStorage.setItem("temaSite", next);
+            localStorage.setItem("temaClinica", next);
+            localStorage.setItem("clinica-theme", next);
+        } catch (_) {}
     });
 
     passwordToggle?.addEventListener("click", () => {

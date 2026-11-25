@@ -264,3 +264,6 @@ body {
         width: 100%;
     }
 }
+
+.label-line { display: flex; justify-content: space-between; align-items: center; }
+.signup-link { font-weight: 800; }

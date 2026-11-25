@@ -5,7 +5,10 @@
 <div class="page-head">
     <h1>{% if eh_paciente %}Meus pagamentos{% else %}Financeiro{% endif %}</h1>
     <div class="acoes-linha">
-        {% if pode_pagar %}<a class="btn btn-primary" href="{% url 'pagar' %}">Realizar pagamento</a>{% endif %}
+        {% if pode_pagar %}
+            <a class="btn btn-primary" href="{% url 'pagar' %}">Realizar pagamento</a>
+            <a class="btn btn-secondary" href="{% url 'pagar_consulta' %}">Pagar por consulta</a>
+        {% endif %}
         {% if pode_criar %}<a class="btn btn-primary" href="{% url 'novo_pagamento' %}">Registrar pagamento</a>{% endif %}
     </div>
 </div>
@@ -32,7 +35,7 @@
                 <tr>
                     {% if not eh_paciente %}<th>Paciente</th><th>CPF</th>{% endif %}
                     <th>Descrição</th><th>Valor</th><th>Forma</th><th>Status</th><th>Data</th>
-                    {% if pode_excluir or pode_criar %}<th class="col-acoes">Ações</th>{% endif %}
+                    {% if pode_excluir or pode_criar or pode_cancelar %}<th class="col-acoes">Ações</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -45,15 +48,22 @@
                     <td>{{ p.descricao }}</td>
                     <td>R$ {{ p.valor|floatformat:2 }}</td>
                     <td>{{ p.forma_pagamento }}</td>
-                    <td><span class="badge {% if p.status_pagamento.descricao == 'Concluído' %}badge-ok{% elif p.status_pagamento.descricao == 'Pendente' %}badge-warn{% else %}badge-off{% endif %}">{{ p.status_pagamento.descricao }}</span></td>
+                    <td><span class="badge {{ p.classe_status }}">{{ p.status_pagamento.descricao }}</span></td>
                     <td>{{ p.data_pagamento|date:"d/m/Y" }}</td>
-                    {% if pode_excluir or pode_criar %}
+                    {% if pode_excluir or pode_criar or pode_cancelar %}
                     <td class="col-acoes">
                         <div class="acoes-linha">
-                            {% if pode_criar and p.status_pagamento.descricao == 'Pendente' %}
+                            {% if pode_criar and p.esta_pendente %}
                             <form method="POST" action="{% url 'confirmar_pagamento' p.pk %}">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-success btn-sm">Confirmar</button>
+                            </form>
+                            {% endif %}
+                            {% if pode_cancelar and not p.esta_cancelado %}
+                            <form method="POST" action="{% url 'cancelar_pagamento' p.pk %}"
+                                  onsubmit="return confirm('Cancelar este pagamento? Ele continua no histórico.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-secondary btn-sm">Cancelar</button>
                             </form>
                             {% endif %}
                             {% if pode_excluir %}
@@ -71,6 +81,7 @@
             </tbody>
         </table>
     </div>
+    {% include "_paginacao.html" %}
     {% else %}
     <p class="empty">Nenhum pagamento encontrado.</p>
     {% endif %}

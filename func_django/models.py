@@ -1,4 +1,6 @@
 from django.db import models
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib import messages
 
 class Medico(models.Model):
 
@@ -11,6 +13,9 @@ class Medico(models.Model):
         db_table = 'medicos'
         managed = False
 
+
+    def __str__(self):
+        return f"{self.nome} (CRM {self.crm})"
 class func_django(models.Model):
 
     cpf = models.CharField(max_length=11, primary_key=True)
@@ -30,6 +35,9 @@ class func_django(models.Model):
         db_table = 'pacientes'
         managed = True
         
+
+    def __str__(self):
+        return f"{self.nome or 'Sem nome'} ({self.cpf})"
 class Alergia(models.Model):
 
     id_alergias = models.AutoField(primary_key=True)
@@ -60,6 +68,9 @@ class Perfil(models.Model):
         managed = True
 
 
+
+    def __str__(self):
+        return self.nome_perfil
 class Usuario(models.Model):
 
     id_usuario = models.AutoField(primary_key=True)
@@ -103,6 +114,9 @@ class Usuario(models.Model):
         db_table = 'usuarios'
         managed = True
         
+
+    def __str__(self):
+        return self.username
 class GoogleIdentity(models.Model):
     id_google = models.AutoField(primary_key=True)
 
@@ -164,6 +178,9 @@ class Especialidade(models.Model):
         managed = False
 
 
+
+    def __str__(self):
+        return self.nome
 class MedicoEspecialidade(models.Model):
 
     id_medico_especialidade = models.AutoField(primary_key=True)
@@ -213,6 +230,9 @@ class StatusAgendamento(models.Model):
         managed = False
 
 
+
+    def __str__(self):
+        return self.descricao
 class Agendamento(models.Model):
     id_agendamento = models.AutoField(primary_key=True)
 
@@ -250,6 +270,9 @@ class StatusPagamento(models.Model):
         db_table = "status_pagamento"
 
 
+
+    def __str__(self):
+        return self.descricao
 class Pagamento(models.Model):
     id_pagamento = models.AutoField(primary_key=True)
 
@@ -273,3 +296,33 @@ class Pagamento(models.Model):
 
     class Meta:
         db_table = "pagamentos"
+
+def adicionar_alergia(request, cpf):
+
+    paciente = get_object_or_404(func_django, cpf=cpf)
+
+    if request.method == "POST":
+
+        descricao = request.POST.get("descricao", "").strip()
+
+        if not descricao:
+            messages.error(request, "Informe uma alergia.")
+            return redirect("detalhe_paciente", cpf=cpf)
+
+        # Evita alergias duplicadas
+        if Alergia.objects.filter(
+            paciente=paciente,
+            descricao__iexact=descricao
+        ).exists():
+
+            messages.warning(request, "Essa alergia já está cadastrada.")
+            return redirect("detalhe_paciente", cpf=cpf)
+
+        Alergia.objects.create(
+            paciente=paciente,
+            descricao=descricao
+        )
+
+        messages.success(request, "Alergia cadastrada com sucesso!")
+
+    return redirect("detalhe_paciente", cpf=cpf)

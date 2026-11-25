@@ -21,6 +21,13 @@
                 Não encontramos um paciente associado à sua conta.
                 Entre em contato com a recepção da clínica.
             </p>
+            {% if mostrar_completar_cadastro %}
+                <p style="margin-top: 16px;">
+                    <a class="btn btn-primary" href="{% url 'completar_cadastro_google' %}">
+                        Completar meu cadastro
+                    </a>
+                </p>
+            {% endif %}
         </section>
 
     {% else %}
@@ -104,27 +111,54 @@
 
             </section>
 
-            <!-- ALERGIAS -->
-            <section class="dashboard-card">
+<!-- ALERGIAS -->
+<section class="dashboard-card alergias-card">
 
-                <h2>Minhas alergias</h2>
+    <div class="alergias-titulo">
+        <h2>Alergias</h2>
+        <p>Informações importantes para o atendimento</p>
+    </div>
 
-                {% if alergias %}
+    {% if alergias %}
+        <div class="alergias-lista">
 
-                    {% for alergia in alergias %}
+            {% for alergia in alergias %}
+                <div class="alergia-linha">
 
-                        <div class="info-item">
-                            <span>Alergia:</span>
-                            <strong>{{ alergia.descricao }}</strong>
-                        </div>
+                    <span class="alergia-indicador">!</span>
 
-                    {% endfor %}
+                    <strong>{{ alergia.descricao }}</strong>
 
-                {% else %}
+                    {% if pode_gerir_alergia %}
+                        <form
+                            method="POST"
+                            action="{% url 'excluir_alergia' paciente.cpf alergia.id_alergias %}"
+                            onsubmit="return confirm('Deseja realmente excluir esta alergia?');"
+                        >
+                            {% csrf_token %}
+                            <button
+                                type="submit"
+                                class="btn-remover-alergia"
+                                title="Excluir alergia"
+                            >
+                                Remover
+                            </button>
+                        </form>
+                    {% endif %}
 
-                    <p>Nenhuma alergia cadastrada.</p>
+                </div>
+            {% endfor %}
 
-                {% endif %}
+        </div>
+    {% else %}
+        <p class="alergias-vazio">
+            Nenhuma alergia cadastrada.
+        </p>
+    {% endif %}
+
+</section>
+
+
 
             </section>
 
@@ -153,7 +187,11 @@
                                         <td>{{ ag.tipo }}</td>
                                         <td>{{ ag.medico.nome }}</td>
                                         <td>
-                                            {{ ag.data_hora|date:"d/m/Y H:i" }}
+                                            {% if ag.horario_a_definir %}
+                                                {{ ag.data_hora|date:"d/m/Y" }} (horário a definir)
+                                            {% else %}
+                                                {{ ag.data_hora|date:"d/m/Y H:i" }}
+                                            {% endif %}
                                         </td>
                                         <td>{{ ag.status.descricao }}</td>
                                     </tr>
@@ -279,71 +317,102 @@
         <p>Você está no painel do Sistema de Gestão Clínica.</p>
     </section>
 
-    
-<div class="dashboard-cards">
+    <div class="dashboard-cards">
+
+        {% if total_pacientes is not None %}
+            <section class="dashboard-card">
+                <h2>Visão geral</h2>
+
+                <div class="info-item">
+                    <span>Pacientes cadastrados:</span>
+                    <strong>{{ total_pacientes }}</strong>
+                </div>
+
+                <div class="info-item">
+                    <span>Médicos ativos:</span>
+                    <strong>{{ total_medicos }}</strong>
+                </div>
+
+                <div class="info-item">
+                    <span>Consultas e exames registrados:</span>
+                    <strong>{{ total_consultas }}</strong>
+                </div>
+            </section>
+        {% endif %}
+
+        {% if consultas_hoje is not None %}
+            <section class="dashboard-card">
+                <h2>Seu dia</h2>
+
+                <div class="info-item">
+                    <span>Consultas agendadas para hoje:</span>
+                    <strong>{{ consultas_hoje }}</strong>
+                </div>
+
+                <div class="info-item">
+                    <span>Total de consultas:</span>
+                    <strong>{{ total_consultas }}</strong>
+                </div>
+            </section>
+        {% endif %}
+
+        {% if solicitacoes_pendentes is not None %}
+            <section class="dashboard-card">
+                <h2>Solicitações de consulta</h2>
+
+                <div class="info-item">
+                    <span>Aguardando resposta:</span>
+                    <strong>{{ solicitacoes_pendentes }}</strong>
+                </div>
+
+                <p style="margin-top: 16px;">
+                    <a class="btn btn-primary"
+                       href="{% url 'lista' 'consultas' %}">
+                        Ver consultas
+                    </a>
+                </p>
+            </section>
+        {% endif %}
+
+    </div>
 
     {% if consultas_hoje is not None %}
-        <section class="dashboard-card">
-            <h2>Seu dia</h2>
-
-            <div class="info-item">
-                <span>Consultas agendadas para hoje:</span>
-                <strong>{{ consultas_hoje }}</strong>
-            </div>
-        </section>
-    {% endif %}
-
-    {% if solicitacoes_pendentes is not None %}
-        <section class="dashboard-card">
-            <h2>Solicitações de consulta</h2>
-
-            <div class="info-item">
-                <span>Aguardando resposta:</span>
-                <strong>{{ solicitacoes_pendentes }}</strong>
-            </div>
-
-            <p style="margin-top: 16px;">
-                <a class="btn btn-primary"
-                   href="{% url 'lista' 'consultas' %}">
-                    Ver consultas
-                </a>
-            </p>
-        </section>
-    {% endif %}
-
-</div>
-
-{% if atalhos %}
-    <section class="atalhos" aria-label="Acesso rápido">
-        {% for a in atalhos %}
-            <a class="atalho" href="{{ a.url }}">
-                {{ a.titulo }}
-            </a>
-        {% endfor %}
-    </section>
-{% else %}
-    <div class="alert alert-warning" style="margin-top: 20px;">
-        Nenhuma tela está liberada para o perfil "{{ request.session.perfil }}".
-        Peça ao administrador para conferir o nome do perfil.
-    </div>
-{% endif %}
-
-
-    {% if solicitacoes_pendentes is not None %}
         <section class="dashboard-card" style="margin-top: 20px;">
-            <h2>Solicitações de consulta</h2>
+            <h2>Próximas consultas</h2>
 
-            <div class="info-item">
-                <span>Aguardando resposta:</span>
-                <strong>{{ solicitacoes_pendentes }}</strong>
-            </div>
-
-            <p style="margin-top: 16px;">
-                <a class="btn btn-primary"
-                   href="{% url 'lista' 'consultas' %}">
-                    Ver consultas
-                </a>
-            </p>
+            {% if proximas_consultas %}
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Data e hora</th>
+                                <th>Paciente</th>
+                                <th>Tipo</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in proximas_consultas %}
+                                <tr>
+                                    <td>{{ c.data_hora|date:"d/m/Y H:i" }}</td>
+                                    <td>{{ c.paciente.nome|default:c.paciente.cpf }}</td>
+                                    <td>{{ c.tipo }}</td>
+                                    <td>{{ c.status.descricao }}</td>
+                                    <td>
+                                        <a class="btn btn-primary btn-sm"
+                                           href="{% url 'detalhe_paciente' c.paciente.cpf %}">
+                                            Ver paciente
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>Você não possui consultas futuras agendadas.</p>
+            {% endif %}
         </section>
     {% endif %}
 

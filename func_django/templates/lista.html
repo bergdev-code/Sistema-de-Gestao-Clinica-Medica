@@ -1,78 +1,149 @@
+
 {% extends 'base.html' %}
 {% block title %}{{ titulo }}{% endblock %}
 
 {% block content %}
 <div class="page-head">
     <h1>{{ titulo }}</h1>
+
     <div class="acoes-linha">
-        {% if pode_solicitar %}<a class="btn btn-primary" href="{% url 'solicitar_consulta' %}">Solicitar consulta ou exame</a>{% endif %}
-        {% if pode_criar %}<a class="btn btn-primary" href="{% url 'novo' recurso %}">Cadastrar</a>{% endif %}
+        {% if pode_solicitar %}
+            <a class="btn btn-primary" href="{% url 'solicitar_consulta' %}">
+                Solicitar consulta ou exame
+            </a>
+        {% endif %}
+
+        {% if pode_criar %}
+            <a class="btn btn-primary" href="{% url 'novo' recurso %}">
+                Cadastrar
+            </a>
+        {% endif %}
     </div>
 </div>
 
 {% if pode_aceitar and pendentes %}
-<div class="alert alert-info">{{ pendentes }} solicitação(ões) de consulta aguardando resposta.</div>
+    <div class="alert alert-info">
+        {{ pendentes }} solicitação(ões) de consulta aguardando resposta.
+    </div>
 {% endif %}
 
 <form method="GET" class="search-bar">
-    <input type="search" name="q" value="{{ q }}" placeholder="Pesquisar em {{ titulo|lower }}">
+    <input type="search" name="q" value="{{ q }}"
+           placeholder="Pesquisar em {{ titulo|lower }}">
     <button type="submit" class="btn btn-secondary">Pesquisar</button>
 </form>
 
 <div class="table-card">
     {% if linhas %}
-    <div class="table-scroll">
-        <table>
-            <thead>
-                <tr>
-                    {% for c in colunas %}<th>{{ c }}</th>{% endfor %}
-                    {% if pode_excluir or pode_aceitar or recurso == "pacientes" %}
-                        <th class="col-acoes">Ações</th>
-                    {% endif %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for linha in linhas %}
-                <tr>
-                    {% for valor in linha.valores %}<td>{{ valor|default:"—" }}</td>{% endfor %}
-                    {% if pode_excluir or pode_aceitar or recurso == "pacientes" %}
-<td class="col-acoes">
-    <div class="acoes-linha">
+        <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        {% for c in colunas %}
+                            <th>{{ c }}</th>
+                        {% endfor %}
 
-        {% if recurso == "pacientes" %}
-            <a
-                href="{% url 'detalhe_paciente' linha.pk %}"
-                class="btn btn-primary btn-sm"
-            >
-                Ver detalhes
-            </a>
-        {% endif %}
-                        <div class="acoes-linha">
-                            {% if linha.pendente and pode_aceitar %}
-                            <a class="btn btn-success btn-sm" href="{% url 'aceitar_consulta' linha.pk %}">Aceitar</a>
-                            <form method="POST" action="{% url 'recusar_consulta' linha.pk %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-secondary btn-sm">Recusar</button>
-                            </form>
+                        {% if pode_excluir or pode_aceitar or pode_editar or pode_cancelar or recurso == "pacientes" or pode_registrar_dinheiro %}
+                            <th class="col-acoes">Ações</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for linha in linhas %}
+                        <tr>
+                            {% for valor in linha.valores %}
+                                <td>{{ valor|default:"—" }}</td>
+                            {% endfor %}
+
+                            {% if pode_excluir or pode_aceitar or pode_editar or pode_cancelar or recurso == "pacientes" or pode_registrar_dinheiro %}
+                                <td class="col-acoes">
+                                    <div class="acoes-linha">
+
+                                        {% if recurso == "pacientes" %}
+                                            <a href="{% url 'detalhe_paciente' linha.pk %}"
+                                               class="btn btn-primary btn-sm">
+                                                Ver detalhes
+                                            </a>
+                                        {% endif %}
+
+                                        {% if pode_editar %}
+                                            <a href="{% url 'editar' recurso linha.pk %}"
+                                               class="btn btn-secondary btn-sm">
+                                                Editar
+                                            </a>
+                                        {% endif %}
+
+                                        {% if linha.pendente and pode_aceitar %}
+                                            <a class="btn btn-success btn-sm"
+                                               href="{% url 'aceitar_consulta' linha.pk %}">
+                                                Aceitar
+                                            </a>
+
+                                            <form method="POST"
+                                                  action="{% url 'recusar_consulta' linha.pk %}">
+                                                {% csrf_token %}
+                                                <button type="submit"
+                                                        class="btn btn-secondary btn-sm">
+                                                    Recusar
+                                                </button>
+                                            </form>
+                                        {% endif %}
+
+                                        {% if linha.pode_cancelar %}
+                                            <form method="POST"
+                                                  action="{% url 'cancelar_consulta' linha.pk %}"
+                                                  onsubmit="return confirm('Cancelar este atendimento?');">
+                                                {% csrf_token %}
+                                                <button type="submit"
+                                                        class="btn btn-secondary btn-sm">
+                                                    Cancelar
+                                                </button>
+                                            </form>
+                                        {% endif %}
+
+                                        {% if linha.pode_registrar_dinheiro %}
+                                            <form method="POST"
+                                                  action="{% url 'registrar_pagamento_dinheiro' linha.pk %}"
+                                                  onsubmit="return confirm('Confirmar o recebimento de R$ 60,00 em dinheiro?');">
+                                                {% csrf_token %}
+                                                <button type="submit"
+                                                        class="btn btn-success btn-sm">
+                                                    Registrar dinheiro
+                                                </button>
+                                            </form>
+                                        {% endif %}
+
+                                        {% if pode_excluir %}
+                                            <form method="POST"
+                                                  action="{% url 'excluir' recurso linha.pk %}"
+                                                  onsubmit="return confirm('Excluir este registro? Essa ação não pode ser desfeita.');">
+                                                {% csrf_token %}
+                                                <button type="submit"
+                                                        class="btn btn-danger btn-sm">
+                                                    Excluir
+                                                </button>
+                                            </form>
+                                        {% endif %}
+
+                                    </div>
+                                </td>
                             {% endif %}
-                            {% if pode_excluir %}
-                            <form method="POST" action="{% url 'excluir' recurso linha.pk %}"
-                                  onsubmit="return confirm('Excluir este registro? Essa ação não pode ser desfeita.');">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
-                            </form>
-                            {% endif %}
-                        </div>
-                    </td>
-                    {% endif %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "_paginacao.html" %}
     {% else %}
-    <p class="empty">Nenhum registro encontrado.
-        {% if pode_solicitar %}Use "Solicitar consulta ou exame" para pedir um horário.{% elif pode_criar %}Use "Cadastrar" para adicionar o primeiro.{% endif %}</p>
+        <p class="empty">
+            Nenhum registro encontrado.
+            {% if pode_solicitar %}
+                Use "Solicitar consulta ou exame" para pedir um horário.
+            {% elif pode_criar %}
+                Use "Cadastrar" para adicionar o primeiro.
+            {% endif %}
+        </p>
     {% endif %}
 </div>
 {% endblock %}

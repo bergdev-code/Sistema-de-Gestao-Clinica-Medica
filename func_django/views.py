@@ -1,40 +1,47 @@
 import datetime as dt
 import hashlib
 import hmac
+import importlib
+import logging
 import os
+import re
 import secrets
 import unicodedata
 from decimal import Decimal
 from functools import wraps
+from urllib.parse import urlencode
 
 from django import forms
 from django.conf import settings
 from django.contrib import messages
+from django.core.cache import cache
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db import IntegrityError, models, transaction
 from django.db.models import Count, ProtectedError, Q, Sum
 from django.forms import modelform_factory
-from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404
-from django.utils import timezone
-from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from django.views.decorators.http import require_POST
-import re
-import requests
 
-from urllib.parse import urlencode
+# O login com Google é opcional: se as bibliotecas não estiverem instaladas
+# (pip install requests google-auth), só esse recurso fica indisponível e o
+# restante do sistema continua funcionando normalmente.
+try:
+    import requests
+    from google.auth.transport import requests as google_requests
+    from google.oauth2 import id_token
+except ImportError:
+    requests = google_requests = id_token = None
 
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-
-from sistema_clinica.funcionalidades.regex import validar_email, validar_nome
 from func_django.models import (
-    Alergia,
     Agendamento,
+    Alergia,
     Especialidade,
+    GoogleIdentity,
     HorarioMedico,
     Medico,
     MedicoEspecialidade,
@@ -44,9 +51,95 @@ from func_django.models import (
     StatusAgendamento,
     StatusPagamento,
     Usuario,
-    GoogleIdentity,
     func_django,
 )
+
+
+# ==================================================
+# VALIDADORES (os mesmos do terminal, com reserva)
+# ==================================================
+def _validar_nome_padrao(texto):
+    return bool(re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ ]{3,}", (texto or "").strip()))
+
+
+def _validar_email_padrao(texto):
+    return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", (texto or "").strip()))
+
+
+def _validar_senha_padrao(texto):
+    texto = texto or ""
+    return len(texto) >= 8 and any(c.isalpha() for c in texto) and any(c.isdigit() for c in texto)
+
+
+def _validador(nome, padrao):
+    """Usa a função de sistema_clinica.funcionalidades.regex (a mesma do terminal).
+    Se esse módulo não estiver no projeto, usa uma versão equivalente simples,
+    em vez de derrubar o site inteiro com um ImportError."""
+    try:
+        modulo = importlib.import_module("sistema_clinica.funcionalidades.regex")
+    except ImportError:
+        return padrao
+    return getattr(modulo, nome, padrao)
+
+
+validar_nome = _validador("validar_nome", _validar_nome_padrao)
+validar_email = _validador("validar_email", _validar_email_padrao)
+validar_senha = _validador("validar_senha", _validar_senha_padrao)
+
+
+# ==================================================
+# AUDITORIA (quem fez o quê) — vai para o logger "clinica.auditoria"
+# ==================================================
+auditoria = logging.getLogger("clinica.auditoria")
+
+
+def registrar_auditoria(request, acao, detalhe=""):
+    """Registra ações sensíveis. Nunca coloque senhas nem texto clínico em 'detalhe':
+    só identificadores (CPF, número do registro...). Para gravar em arquivo, configure
+    o logger "clinica.auditoria" em LOGGING no settings.py."""
+    sessao = getattr(request, "session", None) or {}
+    auditoria.info(
+        "acao=%s usuario=%s perfil=%s ip=%s %s",
+        acao, sessao.get("username", "-"), sessao.get("perfil", "-"),
+        request.META.get("REMOTE_ADDR", "-"), detalhe,
+    )
+
+
+# ==================================================
+# UTILITÁRIOS DE DADOS
+# ==================================================
+def somente_digitos(texto):
+    return re.sub(r"\D", "", texto or "")
+
+
+def cpf_valido(cpf):
+    """CPF com 11 números. Os dígitos verificadores só são conferidos se
+    CLINICA_VALIDAR_DIGITO_CPF = True no settings.py (deixe desligado enquanto
+    estiver testando com CPFs inventados)."""
+    if not re.fullmatch(r"\d{11}", cpf or ""):
+        return False
+    if not getattr(settings, "CLINICA_VALIDAR_DIGITO_CPF", False):
+        return True
+    if len(set(cpf)) == 1:
+        return False
+    for tamanho in (9, 10):
+        soma = sum(int(d) * peso for d, peso in zip(cpf[:tamanho], range(tamanho + 1, 1, -1)))
+        if (soma * 10) % 11 % 10 != int(cpf[tamanho]):
+            return False
+    return True
+
+
+def hoje_local():
+    return timezone.localdate() if settings.USE_TZ else dt.date.today()
+
+
+POR_PAGINA = 25
+
+
+def paginar(request, itens, por_pagina=POR_PAGINA):
+    """Divide a listagem em páginas (?pagina=2). 'itens' precisa estar ordenado."""
+    return Paginator(itens, por_pagina).get_page(request.GET.get("pagina"))
+
 
 ITERACOES = 600000  # igual ao verificar_usuario.py
 
@@ -59,14 +152,31 @@ CAMPOS_USUARIO = ["username", "email", "id_perfil", "medico"]
 TEM_CAMPO_PACIENTE = any(f.name == "paciente" for f in Usuario._meta.get_fields())
 
 
-class UsuarioForm(forms.ModelForm):
+class ContatoMixin:
+    """Aceita CPF e telefone digitados com máscara (123.456.789-09, (81) 99999-9999):
+    o que vai para o banco são só os números, igual ao cadastro público."""
+
+    def clean_cpf(self):
+        cpf = somente_digitos(self.cleaned_data.get("cpf"))
+        if cpf and not cpf_valido(cpf):
+            raise ValidationError("CPF inválido. Informe os 11 números.")
+        return cpf
+
+    def clean_telefone(self):
+        telefone = somente_digitos(self.cleaned_data.get("telefone"))
+        if telefone and not re.fullmatch(r"\d{10,11}", telefone):
+            raise ValidationError("Informe o telefone com DDD (10 ou 11 números).")
+        return telefone or None
+
+
+class UsuarioForm(ContatoMixin, forms.ModelForm):
     """Mesmas regras do cadastro_usuarios.py do terminal. Com o perfil Paciente,
     cadastra também o paciente (CPF, nome...) na mesma tela."""
 
     senha = forms.CharField(widget=forms.PasswordInput, min_length=8, label="Senha (mínimo 8 caracteres)")
-    cpf = forms.CharField(required=False, max_length=11, label="CPF do paciente")
+    cpf = forms.CharField(required=False, max_length=14, label="CPF do paciente")
     nome = forms.CharField(required=False, max_length=150, label="Nome do paciente")
-    telefone = forms.CharField(required=False, max_length=11, label="Telefone do paciente")
+    telefone = forms.CharField(required=False, max_length=15, label="Telefone do paciente")
     data_nascimento = forms.DateField(
         required=False, label="Data de nascimento do paciente",
         widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
@@ -97,13 +207,15 @@ class UsuarioForm(forms.ModelForm):
         username = self.cleaned_data["username"].strip()
         if not validar_nome(username):
             raise ValidationError("Use apenas letras e espaços (mínimo de 3 caracteres).")
+        if Usuario.objects.filter(username__iexact=username).exists():
+            raise ValidationError("Nome de usuário já cadastrado.")
         return username
 
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
         if not validar_email(email):
             raise ValidationError("E-mail inválido.")
-        if Usuario.objects.filter(email=email).exists():
+        if Usuario.objects.filter(email__iexact=email).exists():
             raise ValidationError("E-mail já cadastrado.")
         return email
 
@@ -145,10 +257,12 @@ class UsuarioForm(forms.ModelForm):
         return usuario
 
 
-class PacienteForm(forms.ModelForm):
+class PacienteForm(ContatoMixin, forms.ModelForm):
     """Cadastro de paciente. Se usuário, e-mail e senha forem preenchidos,
     cria junto o acesso (login) do paciente, sempre com o perfil Paciente."""
 
+    cpf = forms.CharField(max_length=14, label="CPF")
+    telefone = forms.CharField(max_length=15, required=False, label="Telefone")
     username = forms.CharField(
         required=False, max_length=10, label="Nome de usuário (login)",
         help_text="Opcional: preencha usuário, e-mail e senha para criar o acesso do paciente ao sistema.",
@@ -167,6 +281,14 @@ class PacienteForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self._perfil = None
 
+    def clean_cpf(self):
+        cpf = super().clean_cpf()
+        if not cpf:
+            raise ValidationError("CPF inválido. Informe os 11 números.")
+        if func_django.objects.filter(cpf=cpf).exists():
+            raise ValidationError("Já existe um paciente cadastrado com esse CPF.")
+        return cpf
+
     def clean(self):
         dados = super().clean()
         username = (dados.get("username") or "").strip()
@@ -180,18 +302,16 @@ class PacienteForm(forms.ModelForm):
             return dados
         if not validar_nome(username):
             self.add_error("username", "Use apenas letras e espaços (mínimo de 3 caracteres).")
-        elif Usuario.objects.filter(username=username).exists():
+        elif Usuario.objects.filter(username__iexact=username).exists():
             self.add_error("username", "Nome de usuário já cadastrado.")
         if not validar_email(email):
             self.add_error("email", "E-mail inválido.")
-        elif Usuario.objects.filter(email=email).exists():
+        elif Usuario.objects.filter(email__iexact=email).exists():
             self.add_error("email", "E-mail já cadastrado.")
         if len(senha) < 8:
             self.add_error("senha", "A senha deve ter no mínimo 8 caracteres.")
 
-        self._perfil = next(
-            (p for p in Perfil.objects.all() if chave_perfil(p.nome_perfil) == _n(PERFIL_PACIENTE)), None
-        )
+        self._perfil = obter_perfil_paciente()
         if self._perfil is None:
             self.add_error(None, "O perfil Paciente não existe na tabela de perfis. Peça ao administrador para cadastrá-lo.")
         dados["username"], dados["email"] = username, email
@@ -211,45 +331,119 @@ class PacienteForm(forms.ModelForm):
         return paciente
 
 
+class PacienteEdicaoForm(ContatoMixin, forms.ModelForm):
+    """Edição dos dados do paciente. O CPF é a chave do cadastro e não é alterado."""
+
+    telefone = forms.CharField(max_length=15, required=False, label="Telefone")
+
+    class Meta:
+        model = func_django
+        fields = ["nome", "telefone", "data_nascimento"]
+        widgets = {"data_nascimento": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")}
+        labels = {"nome": "Nome", "data_nascimento": "Data de nascimento"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["nome"].required = True
+
+    def clean_data_nascimento(self):
+        data = self.cleaned_data.get("data_nascimento")
+        if data and data >= hoje_local():
+            raise ValidationError("A data de nascimento deve ser anterior à data atual.")
+        return data
+
+
+class ProntuarioForm(forms.ModelForm):
+    """Registro clínico. O médico só registra para os SEUS pacientes e sempre em
+    seu próprio nome: o campo 'médico' é fixado pelo sistema e não vem da tela."""
+
+    precisa_request = True  # o 'novo'/'editar' entregam o request a este formulário
+
+    class Meta:
+        model = Prontuario
+        fields = ["paciente", "medico", "agendamento_id", "anamnese", "diagnostico", "prescricao"]
+        labels = {"agendamento_id": "Nº da consulta (opcional)", "anamnese": "Anamnese",
+                  "diagnostico": "Diagnóstico", "prescricao": "Prescrição"}
+        widgets = {campo: forms.Textarea(attrs={"rows": 4}) for campo in ("anamnese", "diagnostico", "prescricao")}
+
+    def __init__(self, *args, request=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request = request
+        self.fields["paciente"].label_from_instance = rotulo
+        self.fields["medico"].label_from_instance = rotulo
+        perfil = chave_perfil(request.session.get("perfil")) if request else ""
+        editando = bool(self.instance and self.instance.pk)
+
+        if perfil == _n(PERFIL_MEDICO):
+            crm = request.session.get("crm") or ""
+            self.fields["paciente"].queryset = pacientes_visiveis(request).order_by("nome")
+            self.fields["medico"].queryset = Medico.objects.filter(pk=crm)
+            self.fields["medico"].disabled = True
+            self.initial["medico"] = crm  # campo desabilitado usa o valor inicial, nunca o enviado
+
+        if editando:  # em um prontuário já criado, paciente e médico não mudam
+            self.fields["paciente"].queryset = func_django.objects.filter(pk=self.instance.paciente_id)
+            self.fields["medico"].queryset = Medico.objects.filter(pk=self.instance.medico_id)
+            self.fields["paciente"].disabled = True
+            self.fields["medico"].disabled = True
+
+    def clean(self):
+        dados = super().clean()
+        paciente, medico = dados.get("paciente"), dados.get("medico")
+        ag_id = dados.get("agendamento_id")
+        if ag_id and paciente and medico:
+            if not Agendamento.objects.filter(pk=ag_id, paciente=paciente, medico=medico).exists():
+                self.add_error("agendamento_id", "Essa consulta não existe ou não é deste paciente com este médico.")
+        return dados
+
+
 # Cada recurso vira lista + cadastro + exclusão usando os mesmos 3 templates.
 # colunas: (campo, rótulo) | busca: campos da pesquisa | criar: libera "Cadastrar"
-# esconder: campos que nunca aparecem no formulário
+# esconder: campos que nunca aparecem no formulário | ordem: ordenação da listagem
 RECURSOS = {
     "pacientes": {
         "model": func_django, "titulo": "Pacientes", "form": PacienteForm, "escopo": {"medico": "agendamento__medico", "paciente": "cpf"},
         "colunas": [("cpf", "CPF"), ("nome", "Nome"), ("telefone", "Telefone"),
                     ("data_nascimento", "Nascimento")],
         "busca": ["nome", "cpf"],
+        "ordem": ["nome", "cpf"],
     },
     "medicos": {
         "model": Medico, "titulo": "Médicos",
         "colunas": [("crm", "CRM"), ("nome", "Nome"), ("telefone", "Telefone"), ("ativo", "Ativo")],
         "busca": ["nome", "crm"],
+        "ordem": ["nome"],
     },
     "especialidades": {
         "model": Especialidade, "titulo": "Especialidades",
         "colunas": [("nome", "Nome")],
         "busca": ["nome"],
+        "ordem": ["nome"],
     },
     "vinculos": {
         "model": MedicoEspecialidade, "titulo": "Especialidades dos médicos",
         "colunas": [("medico", "Médico"), ("especialidade", "Especialidade")],
         "busca": ["medico__nome", "especialidade__nome"],
+        "ordem": ["medico__nome", "especialidade__nome"],
     },
     "horarios": {
         "model": HorarioMedico, "titulo": "Horários dos médicos",
         "colunas": [("medico", "Médico"), ("dia_semana", "Dia"), ("hora_inicio", "Início"), ("hora_fim", "Fim")],
         "busca": ["medico__nome", "dia_semana"],
+        "ordem": ["medico__nome", "hora_inicio"],
     },
     "consultas": {
         "model": Agendamento, "titulo": "Consultas", "escopo": {"medico": "medico", "paciente": "paciente"},
         "colunas": [("paciente", "Paciente"), ("tipo", "Tipo"), ("medico", "Médico"), ("data_hora", "Data e hora"), ("status", "Status")],
         "busca": ["paciente__nome", "medico__nome"],
+        "ordem": ["-data_hora", "-id_agendamento"],
     },
     "prontuarios": {
         "model": Prontuario, "titulo": "Prontuários", "escopo": {"medico": "medico", "paciente": "paciente"},
         "colunas": [("paciente", "Paciente"), ("medico", "Médico"), ("diagnostico", "Diagnóstico")],
         "busca": ["paciente__nome", "medico__nome"],
+        "form": ProntuarioForm,
+        "ordem": ["-id_prontuario"],
     },
     "pagamentos": {
         "model": Pagamento, "titulo": "Financeiro",
@@ -258,6 +452,7 @@ RECURSOS = {
         "busca": ["descricao"],
         "escopo": {"paciente": "agendamento__paciente"},
         "criar": False,
+        "ordem": ["-data_pagamento", "-id_pagamento"],
     },
     "usuarios": {
         "model": Usuario, "titulo": "Usuários",
@@ -265,6 +460,7 @@ RECURSOS = {
         "busca": ["username", "email"],
         "form": UsuarioForm,
         "esconder": ["senha_hash", "salt"],
+        "ordem": ["username"],
     },
 }
 
@@ -273,36 +469,50 @@ RECURSOS = {
 # PERMISSÕES POR PERFIL
 # ==================================================
 # As chaves devem ser IGUAIS aos valores de Perfil.nome_perfil no banco
-# (com acento e maiúsculas). "*" = todos os recursos.
-# Ações: "ver", "criar", "excluir". Chave "pagamentos" = tela Financeiro.
+# (com acento e maiúsculas). "*" = todos os recursos; a regra de um recurso
+# específico tem prioridade sobre o "*".
+# Ações: ver, criar, editar, excluir, aceitar (consultas), cancelar (consultas e
+# pagamentos), alergia (gerir alergias do paciente), solicitar (consulta) e
+# pagar. Chave "pagamentos" = tela Financeiro.
 def _n(perfil):
     texto = unicodedata.normalize("NFKD", (perfil or "").strip().casefold())
     return "".join(c for c in texto if not unicodedata.combining(c))
 
 
+PERFIL_ROOT = "ADMIN GERAL"
+PERFIL_RECEPCIONISTA = "Recepcionista"
 PERFIL_MEDICO = "Médico"
 PERFIL_PACIENTE = "Paciente"
 
+_ACOES_ADMIN = {"ver", "criar", "editar", "excluir", "aceitar", "cancelar", "alergia"}
+_PERMISSOES_ADMIN = {
+    "*": _ACOES_ADMIN,
+    # Prontuário é registro clínico: quem escreve é o médico. O administrador só
+    # consulta (e pode excluir); não cria nem altera texto clínico de terceiros.
+    "prontuarios": {"ver", "excluir"},
+}
+
 PERMISSOES = {
-    "Administrador": {"*": {"ver", "criar", "excluir", "aceitar"}},
-    "ADMIN GERAL": {"*": {"ver", "criar", "excluir", "aceitar"}},  # usuário root
-    "Recepcionista": {
-        "pacientes": {"ver", "criar", "excluir"},
-        "consultas": {"ver", "criar", "excluir", "aceitar"},
-        "pagamentos": {"ver", "criar", "excluir"},
+    "Administrador": _PERMISSOES_ADMIN,
+    PERFIL_ROOT: _PERMISSOES_ADMIN,  # usuário root
+    PERFIL_RECEPCIONISTA: {
+        "pacientes": {"ver", "criar", "editar", "excluir", "alergia"},
+        "consultas": {"ver", "criar", "excluir", "aceitar", "cancelar"},
+        "pagamentos": {"ver", "criar", "excluir", "cancelar"},
         "medicos": {"ver"},
         "especialidades": {"ver"},
         "horarios": {"ver"},
         "vinculos": {"ver"},
+        # sem "prontuarios": a recepção não acessa conteúdo clínico
     },
     PERFIL_MEDICO: {
-        "pacientes": {"ver"},
+        "pacientes": {"ver", "alergia"},
         "consultas": {"ver"},
-        "prontuarios": {"ver", "criar"},
+        "prontuarios": {"ver", "criar", "editar"},
     },
     # paciente só consulta os próprios dados (o filtro está em aplicar_escopo)
     PERFIL_PACIENTE: {
-        "consultas": {"ver", "solicitar"},
+        "consultas": {"ver", "solicitar", "cancelar"},
         "prontuarios": {"ver"},
         "pagamentos": {"ver", "pagar"},
     },
@@ -320,6 +530,8 @@ def chave_perfil(perfil):
     n = _n(perfil)
     if n in PERMISSOES:
         return n
+    if n.startswith("administrativ"):  # "Administrativo" NÃO é "Administrador"
+        return n
     for prefixo, chave in PREFIXOS.items():
         if n.startswith(prefixo):
             return chave
@@ -328,7 +540,9 @@ def chave_perfil(perfil):
 
 def acoes_do_perfil(perfil, recurso):
     perms = PERMISSOES.get(chave_perfil(perfil), {})
-    return perms.get("*", perms.get(recurso, set()))
+    if recurso in perms:
+        return perms[recurso]
+    return perms.get("*", set())
 
 
 def exigir(request, recurso, acao):
@@ -360,14 +574,34 @@ def aplicar_escopo(request, cfg, qs):
     campo = cfg.get("escopo", {}).get(chave)
     if not campo or not valor:
         return qs.none()  # na dúvida, não mostra nada
-    qs = qs.filter(**{campo: valor})
-    # médico enxerga os pacientes que têm consulta com ele (junção pode repetir linhas)
-    return qs.distinct() if cfg["model"] is func_django and "__" in campo else qs
+    if cfg["model"] is func_django and chave == "medico":
+        # o médico enxerga os pacientes que atende (consulta já aceita pela recepção,
+        # nunca uma simples solicitação) e aqueles de quem é o médico responsável
+        atendidos = (
+            Agendamento.objects.filter(medico_id=valor)
+            .exclude(filtro_status(NOMES_SOLICITADA)).values("paciente_id")
+        )
+        return qs.filter(Q(pk__in=atendidos) | Q(medico_id=valor))
+    return qs.filter(**{campo: valor})
+
+
+def queryset_visivel(request, recurso):
+    """Registros de um recurso que o perfil logado pode enxergar. É a regra única,
+    usada pela listagem, pelo painel e pela ficha do paciente."""
+    cfg = RECURSOS[recurso]
+    qs = aplicar_escopo(request, cfg, cfg["model"].objects.all())
+    if recurso == "consultas" and chave_perfil(request.session.get("perfil")) == _n(PERFIL_MEDICO):
+        qs = qs.exclude(filtro_status(NOMES_SOLICITADA))  # médico vê só o que a recepção já aceitou
+    return qs
 
 
 def pacientes_visiveis(request):
     """Pacientes que o perfil logado pode ver (recepção/admin: todos; médico: os dele)."""
-    return aplicar_escopo(request, RECURSOS["pacientes"], func_django.objects.all())
+    return queryset_visivel(request, "pacientes")
+
+
+def consultas_visiveis(request):
+    return queryset_visivel(request, "consultas")
 
 
 def get_recurso(recurso):
@@ -380,15 +614,25 @@ def login_requerido(view):
     @wraps(view)
     def interno(request, *args, **kwargs):
         if "username" not in request.session:
-            return redirect("login")
+            destino = reverse("login")
+            if request.method == "GET":  # depois do login, volta para onde a pessoa queria ir
+                destino += "?" + urlencode({"next": request.get_full_path()})
+            return redirect(destino)
         return view(request, *args, **kwargs)
     return interno
 
 
 # Usuário administrador geral (igual ao do terminal). Em produção, defina estas
 # variáveis de ambiente em vez de deixar a senha escrita no código.
+SENHA_ROOT_PADRAO = "root@123"
 ROOT_USER = os.environ.get("CLINICA_ROOT_USER", "root")
-ROOT_SENHA = os.environ.get("CLINICA_ROOT_SENHA", "root@123")
+ROOT_SENHA = os.environ.get("CLINICA_ROOT_SENHA", SENHA_ROOT_PADRAO)
+
+if ROOT_SENHA == SENHA_ROOT_PADRAO and not settings.DEBUG:
+    logging.getLogger(__name__).warning(
+        "SEGURANÇA: o administrador geral está com a senha padrão. "
+        "Defina a variável de ambiente CLINICA_ROOT_SENHA."
+    )
 
 
 def senha_confere(usuario, senha):
@@ -410,11 +654,64 @@ def abrir_sessao(request, username, email, perfil, crm="", cpf=""):
         request.session.set_expiry(0)  # expira ao fechar o navegador
 
 
+# ---- proteção contra tentativas de adivinhar a senha -------------------------
+# Usa o cache do Django (em memória por padrão). Com vários processos/servidores,
+# configure um cache compartilhado (Redis/Memcached) em CACHES para valer para todos.
+LIMITE_TENTATIVAS = 5
+JANELA_TENTATIVAS = 15 * 60  # segundos
+
+
+def _chave_tentativas(request, ident):
+    base = f"{request.META.get('REMOTE_ADDR', '')}|{(ident or '').strip().lower()}"
+    return "clinica:login:" + hashlib.sha256(base.encode()).hexdigest()
+
+
+def login_bloqueado(request, ident):
+    return cache.get(_chave_tentativas(request, ident), 0) >= LIMITE_TENTATIVAS
+
+
+def registrar_falha_login(request, ident):
+    chave = _chave_tentativas(request, ident)
+    cache.add(chave, 0, JANELA_TENTATIVAS)
+    try:
+        cache.incr(chave)
+    except ValueError:  # a chave expirou entre as duas linhas
+        cache.set(chave, 1, JANELA_TENTATIVAS)
+
+
+def limpar_falhas_login(request, ident):
+    cache.delete(_chave_tentativas(request, ident))
+
+
+def _marca(ident):
+    """Identificação curta (hash) para o log: nunca grava o que foi digitado, pois
+    muita gente digita a senha no campo de usuário."""
+    return hashlib.sha256((ident or "").encode()).hexdigest()[:8]
+
+
+def destino_pos_login(request, proximo=""):
+    """Volta para a página pedida (?next=), mas só se for do próprio site."""
+    if proximo and url_has_allowed_host_and_scheme(
+        proximo, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return proximo
+    return reverse("dashboard")
+
 
 def login_view(request):
+    if request.method == "GET" and "username" in request.session:
+        return redirect("dashboard")
+
+    proximo = request.POST.get("next") or request.GET.get("next") or ""
+
     if request.method == "POST":
         ident = request.POST.get("identificador", "").strip()
         senha = request.POST.get("senha", "")
+
+        if login_bloqueado(request, ident):
+            registrar_auditoria(request, "login_bloqueado", f"id={_marca(ident)}")
+            messages.error(request, "Muitas tentativas de acesso. Aguarde alguns minutos e tente novamente.")
+            return render(request, "login.html", {"proximo": proximo}, status=429)
 
         # Login do administrador geral
         if (
@@ -424,8 +721,10 @@ def login_view(request):
                 ROOT_SENHA.encode()
             )
         ):
-            abrir_sessao(request, "root", "", "ADMIN GERAL")
-            return redirect("dashboard")
+            limpar_falhas_login(request, ident)
+            abrir_sessao(request, "root", "", PERFIL_ROOT)
+            registrar_auditoria(request, "login", "administrador geral")
+            return redirect(destino_pos_login(request, proximo))
 
         # Busca pelo nome de usuário OU pelo e-mail
         usuario = (
@@ -438,8 +737,21 @@ def login_view(request):
             .first()
         )
 
-        # Confere a senha
-        if usuario and senha_confere(usuario, senha):
+        # Confere a senha. Se o usuário não existe, faz a mesma conta mesmo assim,
+        # para a resposta não demorar menos e revelar que o usuário não existe.
+        if usuario is None:
+            gerar_hash(senha, "00" * 16)
+            confere = False
+        else:
+            confere = senha_confere(usuario, senha)
+
+        if usuario and confere:
+            if usuario.medico is not None and not usuario.medico.ativo:
+                registrar_auditoria(request, "login_negado_inativo", f"id={_marca(ident)}")
+                messages.error(request, "Seu acesso está desativado. Procure o administrador.")
+                return render(request, "login.html", {"proximo": proximo})
+
+            limpar_falhas_login(request, ident)
             abrir_sessao(
                 request,
                 usuario.username,
@@ -448,17 +760,22 @@ def login_view(request):
                 crm=usuario.medico_id or "",
                 cpf=usuario.paciente_id or "",
             )
-            return redirect("dashboard")
+            registrar_auditoria(request, "login")
+            return redirect(destino_pos_login(request, proximo))
 
+        registrar_falha_login(request, ident)
+        registrar_auditoria(request, "login_falhou", f"id={_marca(ident)}")
         messages.error(request, "E-mail ou senha incorretos.")
 
-    return render(request, "login.html")
+    return render(request, "login.html", {"proximo": proximo})
 
 
 @require_POST
 def logout_view(request):
+    registrar_auditoria(request, "logout")
     request.session.flush()
     return redirect("login")
+
 
 # ==================================================
 # LOGIN COM GOOGLE
@@ -496,11 +813,26 @@ def obter_perfil_paciente():
     )
 
 
+def google_configurado():
+    return bool(
+        requests and id_token
+        and getattr(settings, "GOOGLE_CLIENT_ID", "")
+        and getattr(settings, "GOOGLE_CLIENT_SECRET", "")
+    )
+
+
+def google_redirect_uri(request):
+    """Usa GOOGLE_REDIRECT_URI do settings; se não existir, monta a partir da rota."""
+    return getattr(settings, "GOOGLE_REDIRECT_URI", "") or request.build_absolute_uri(
+        reverse("google_callback")
+    )
+
+
 def google_login(request):
     """
     Inicia o processo de autenticação com o Google.
     """
-    if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
+    if not google_configurado():
         messages.error(request, "A autenticação Google ainda não foi configurada.")
         return redirect("login")
 
@@ -509,7 +841,7 @@ def google_login(request):
 
     parametros = {
         "client_id": settings.GOOGLE_CLIENT_ID,
-        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+        "redirect_uri": google_redirect_uri(request),
         "response_type": "code",
         "scope": "openid email profile",
         "state": state,
@@ -529,6 +861,10 @@ def google_callback(request):
     Recebe a resposta do Google, verifica a identidade
     e cria ou recupera a conta do paciente.
     """
+    if not google_configurado():
+        messages.error(request, "A autenticação Google ainda não foi configurada.")
+        return redirect("login")
+
     estado_recebido = request.GET.get("state")
     estado_salvo = request.session.pop("google_oauth_state", None)
 
@@ -549,7 +885,7 @@ def google_callback(request):
                 "code": codigo,
                 "client_id": settings.GOOGLE_CLIENT_ID,
                 "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                "redirect_uri": google_redirect_uri(request),
                 "grant_type": "authorization_code",
             },
             timeout=15,
@@ -583,7 +919,8 @@ def google_callback(request):
             )
             return redirect("login")
 
-    except (requests.RequestException, ValueError, KeyError):
+    except Exception:  # falha de rede, token inválido, resposta inesperada...
+        logging.getLogger(__name__).exception("Falha no login com Google")
         messages.error(
             request,
             "Não foi possível validar sua conta Google. Tente novamente."
@@ -660,6 +997,7 @@ def google_callback(request):
         cpf=usuario.paciente_id or "",
     )
 
+    registrar_auditoria(request, "login_google")
     return redirect("dashboard")
 
 
@@ -711,7 +1049,7 @@ def completar_cadastro_google(request):
 
     if request.method == "POST":
         dados["nome"] = request.POST.get("nome", "").strip()
-        dados["cpf"] = re.sub(r"\D", "", request.POST.get("cpf", ""))
+        dados["cpf"] = somente_digitos(request.POST.get("cpf", ""))
         dados["telefone"] = re.sub(
             r"\D", "", request.POST.get("telefone", "")
         )
@@ -722,10 +1060,13 @@ def completar_cadastro_google(request):
         if len(dados["nome"]) < 3 or len(dados["nome"]) > 150:
             erros["nome"] = "Informe seu nome completo."
 
-        if not re.fullmatch(r"\d{11}", dados["cpf"]):
-            erros["cpf"] = "O CPF deve conter 11 números."
+        if not cpf_valido(dados["cpf"]):
+            erros["cpf"] = "CPF inválido. Informe os 11 números."
         elif func_django.objects.filter(cpf=dados["cpf"]).exists():
-            erros["cpf"] = "Este CPF já está cadastrado."
+            erros["cpf"] = (
+                "Este CPF já está cadastrado. Se você já foi atendido(a) na clínica, "
+                "peça à recepção para vincular o seu acesso."
+            )
 
         if not re.fullmatch(r"\d{10,11}", dados["telefone"]):
             erros["telefone"] = "Informe um telefone com DDD."
@@ -737,7 +1078,7 @@ def completar_cadastro_google(request):
                 dados["data_nascimento"]
             )
 
-            if data_nascimento >= dt.date.today():
+            if data_nascimento >= hoje_local():
                 erros["data_nascimento"] = (
                     "Informe uma data de nascimento válida."
                 )
@@ -789,16 +1130,19 @@ def completar_cadastro_google(request):
 @login_requerido
 def conta(request):
     username_sessao = request.session.get("username", "")
-    email_sessao = request.session.get("email", "")
 
-    # Localiza a conta pelo usuário ou pelo e-mail da sessão
+    # O administrador geral é definido no servidor (variáveis de ambiente), não no banco.
+    if chave_perfil(request.session.get("perfil")) == _n(PERFIL_ROOT) and username_sessao == "root":
+        messages.info(
+            request,
+            "O administrador geral é configurado no servidor e não possui conta para editar aqui."
+        )
+        return redirect("dashboard")
+
     usuario = (
         Usuario.objects
         .select_related("id_perfil", "paciente", "medico")
-        .filter(
-            Q(username__iexact=username_sessao) |
-            Q(email__iexact=email_sessao)
-        )
+        .filter(username__iexact=username_sessao)
         .first()
     )
 
@@ -807,7 +1151,7 @@ def conta(request):
             request,
             "Não foi possível localizar sua conta no banco de dados."
         )
-        return redirect("login")
+        return redirect("dashboard")
 
     if request.method == "POST":
         acao = request.POST.get("acao")
@@ -823,6 +1167,11 @@ def conta(request):
 
             if len(username) > 10:
                 messages.error(request, "O nome de usuário deve ter no máximo 10 caracteres.")
+                return redirect("conta")
+
+            # só confere o formato se o nome mudou (contas criadas pelo Google têm números)
+            if username != usuario.username and not validar_nome(username):
+                messages.error(request, "Use apenas letras e espaços no nome de usuário (mínimo de 3 caracteres).")
                 return redirect("conta")
 
             if len(email) > 50 or not validar_email(email):
@@ -847,6 +1196,7 @@ def conta(request):
 
             request.session["username"] = username
             request.session["email"] = email
+            registrar_auditoria(request, "conta_dados_alterados")
 
             messages.success(request, "Dados da conta atualizados com sucesso!")
             return redirect("conta")
@@ -869,6 +1219,11 @@ def conta(request):
                 messages.error(request, "A nova senha deve ter pelo menos 8 caracteres.")
                 return redirect("conta")
 
+            # mesma regra de senha do cadastro público
+            if not validar_senha(senha_nova):
+                messages.error(request, "Senha fraca! Verifique os requisitos mínimos de senha.")
+                return redirect("conta")
+
             if senha_nova != confirmar_senha:
                 messages.error(request, "A confirmação da senha não corresponde.")
                 return redirect("conta")
@@ -888,6 +1243,7 @@ def conta(request):
             ).hex()
 
             usuario.save(update_fields=["salt", "senha_hash"])
+            registrar_auditoria(request, "senha_alterada")
 
             messages.success(request, "Sua senha foi alterada com sucesso!")
             return redirect("conta")
@@ -938,19 +1294,36 @@ def formatar(valor):
     return valor
 
 
+class ConflitoDeHorario(Exception):
+    """O médico já tem atendimento marcado no horário pedido."""
+
+
+# Recursos que podem ser editados e o formulário de cada um (None = formulário
+# automático, sem a chave primária). Usuários não entram aqui: cada pessoa altera
+# os próprios dados em "Minha conta". Consultas e pagamentos têm telas próprias.
+EDITAVEIS = {
+    "pacientes": PacienteEdicaoForm,
+    "prontuarios": ProntuarioForm,
+    "medicos": None,
+    "especialidades": None,
+    "vinculos": None,
+    "horarios": None,  # definido mais abaixo (HorarioForm)
+}
+
+
 @login_requerido
 def lista(request, recurso):
     cfg = get_recurso(recurso)
     exigir(request, recurso, "ver")
-    acoes = acoes_do_perfil(request.session.get("perfil"), recurso)
-    qs = cfg["model"].objects.all()
+    perfil_atual = request.session.get("perfil")
+    acoes = acoes_do_perfil(perfil_atual, recurso)
 
-    qs = aplicar_escopo(request, cfg, qs)
-    if recurso == "consultas" and chave_perfil(request.session.get("perfil")) == _n(PERFIL_MEDICO):
-        qs = qs.exclude(filtro_status(NOMES_SOLICITADA))  # médico vê só o que a recepção já aceitou
+    qs = queryset_visivel(request, recurso)
     relacionados = [c for c, _ in cfg["colunas"] if cfg["model"]._meta.get_field(c).is_relation]
     if relacionados:
         qs = qs.select_related(*relacionados)
+    if recurso == "pagamentos":
+        qs = qs.select_related("agendamento__paciente")  # o rótulo da consulta usa o paciente
 
     q = request.GET.get("q", "").strip()
     if q and cfg["busca"]:
@@ -959,21 +1332,72 @@ def lista(request, recurso):
             filtro |= Q(**{f"{campo}__icontains": q})
         qs = qs.filter(filtro)
 
+    if cfg.get("ordem"):
+        qs = qs.order_by(*cfg["ordem"])
+
+    pagina = paginar(request, qs)
+    objetos = list(pagina.object_list)
     campos = [c for c, _ in cfg["colunas"]]
-    linhas = [
-        {"pk": obj.pk, "valores": [valor_da_celula(obj, c, recurso) for c in campos],
-         "pendente": recurso == "consultas" and eh_status(obj, NOMES_SOLICITADA)}
-        for obj in qs
-    ]
+
+    eh_recepcionista = chave_perfil(perfil_atual) == _n(PERFIL_RECEPCIONISTA)
+    pode_registrar_dinheiro = (
+        recurso == "consultas"
+        and eh_recepcionista
+        and "criar" in acoes_do_perfil(perfil_atual, "pagamentos")
+    )
+    pagamentos_existentes = set()
+    if pode_registrar_dinheiro and objetos:
+        pagamentos_existentes = set(
+            Pagamento.objects.filter(agendamento__in=[o.pk for o in objetos])
+            .exclude(filtro_status_pagamento(NOMES_PGTO_CANCELADO))
+            .values_list("agendamento_id", flat=True)
+        )
+
+    pode_cancelar = recurso == "consultas" and "cancelar" in acoes
+    pode_editar = recurso in EDITAVEIS and "editar" in acoes
+    hoje = hoje_local()
+
+    linhas = []
+    for obj in objetos:
+        pendente = recurso == "consultas" and eh_status(obj, NOMES_SOLICITADA)
+        cancelada = recurso == "consultas" and eh_status(obj, NOMES_CANCELADA)
+        linhas.append({
+            "pk": obj.pk,
+            "valores": [valor_da_celula(obj, c, recurso) for c in campos],
+            "pendente": pendente,
+            "pode_registrar_dinheiro": (
+                pode_registrar_dinheiro
+                and _n(obj.tipo) == _n("Consulta")
+                and not pendente and not cancelada
+                and obj.pk not in pagamentos_existentes
+            ),
+            "pode_cancelar": (
+                pode_cancelar and not cancelada and data_local(obj.data_hora) >= hoje
+            ),
+        })
+
     return render(request, "lista.html", {
-        "recurso": recurso, "titulo": cfg["titulo"], "ativo": recurso,
-        "colunas": [r for _, r in cfg["colunas"]], "linhas": linhas, "q": q,
+        "recurso": recurso,
+        "titulo": cfg["titulo"],
+        "ativo": recurso,
+        "colunas": [r for _, r in cfg["colunas"]],
+        "linhas": linhas,
+        "pagina": pagina,
+        "q": q,
         "pode_criar": cfg.get("criar", True) and "criar" in acoes,
+        "pode_editar": pode_editar,
         "pode_excluir": "excluir" in acoes,
         "pode_aceitar": recurso == "consultas" and "aceitar" in acoes,
+        "pode_cancelar": pode_cancelar,
         "pode_solicitar": recurso == "consultas" and "solicitar" in acoes,
-        "pendentes": (Agendamento.objects.filter(filtro_status(NOMES_SOLICITADA)).count()
-                      if recurso == "consultas" and "aceitar" in acoes else 0),
+        "pode_registrar_dinheiro": pode_registrar_dinheiro,
+        "pendentes": (
+            Agendamento.objects.filter(
+                filtro_status(NOMES_SOLICITADA)
+            ).count()
+            if recurso == "consultas" and "aceitar" in acoes
+            else 0
+        ),
     })
 
 
@@ -992,6 +1416,15 @@ def _campo_form(campo, **kwargs):
     return f
 
 
+
+def _montar_form(request, Form, **extra):
+    """Cria o formulário; os que precisam saber quem está logado recebem o request."""
+    if getattr(Form, "precisa_request", False):
+        extra["request"] = request
+    dados = request.POST if request.method == "POST" else None
+    return Form(dados, **extra)
+
+
 @login_requerido
 def novo(request, recurso):
     cfg = get_recurso(recurso)
@@ -1002,14 +1435,17 @@ def novo(request, recurso):
         cfg["model"], fields="__all__",
         exclude=cfg.get("esconder", []), formfield_callback=_campo_form,
     )
-    form = Form(request.POST or None)
+    form = _montar_form(request, Form)
     if request.method == "POST" and form.is_valid():
         try:
-            form.save()
+            objeto = form.save()
         except IntegrityError as erro:
             detalhe = erro.args[-1] if erro.args else erro
             form.add_error(None, f"O banco de dados recusou o cadastro: {detalhe}")
+        except ConflitoDeHorario as erro:
+            form.add_error(None, str(erro))
         else:
+            registrar_auditoria(request, "criar", f"recurso={recurso} id={getattr(objeto, 'pk', '-')}")
             messages.success(request, "Cadastro salvo com sucesso.")
             return redirect("lista", recurso=recurso)
     return render(request, "form.html", {
@@ -1020,113 +1456,64 @@ def novo(request, recurso):
 
 
 @login_requerido
+def editar(request, recurso, pk):
+    cfg = get_recurso(recurso)
+    if recurso not in EDITAVEIS:
+        raise Http404
+    exigir(request, recurso, "editar")
+
+    # só edita o que o perfil também pode ver (o médico, apenas os próprios prontuários)
+    try:
+        obj = get_object_or_404(queryset_visivel(request, recurso), pk=pk)
+    except (ValueError, TypeError):
+        raise Http404
+
+    Form = EDITAVEIS[recurso] or modelform_factory(
+        cfg["model"], fields="__all__",
+        exclude=[cfg["model"]._meta.pk.name] + list(cfg.get("esconder", [])),
+        formfield_callback=_campo_form,
+    )
+    form = _montar_form(request, Form, instance=obj)
+    if request.method == "POST" and form.is_valid():
+        try:
+            form.save()
+        except IntegrityError as erro:
+            detalhe = erro.args[-1] if erro.args else erro
+            form.add_error(None, f"O banco de dados recusou a alteração: {detalhe}")
+        else:
+            registrar_auditoria(request, "editar", f"recurso={recurso} id={obj.pk}")
+            messages.success(request, "Alterações salvas com sucesso.")
+            return redirect("lista", recurso=recurso)
+    return render(request, "form.html", {
+        "form": form, "recurso": recurso, "ativo": recurso,
+        "titulo": f"Editar em {cfg['titulo'].lower()}", "botao": "Salvar alterações",
+        "voltar": reverse("lista", args=[recurso]),
+    })
+
+
+@login_requerido
 @require_POST
 def excluir(request, recurso, pk):
     cfg = get_recurso(recurso)
     exigir(request, recurso, "excluir")
-    obj = get_object_or_404(cfg["model"], pk=pk)
+    try:
+        obj = get_object_or_404(queryset_visivel(request, recurso), pk=pk)
+    except (ValueError, TypeError):
+        raise Http404
+
+    if recurso == "usuarios" and obj.username.lower() == (request.session.get("username") or "").lower():
+        messages.error(request, "Você não pode excluir o seu próprio usuário.")
+        return redirect("lista", recurso=recurso)
+
     try:
         obj.delete()
+        registrar_auditoria(request, "excluir", f"recurso={recurso} id={pk}")
         messages.success(request, "Registro excluído.")
     except ProtectedError:
         messages.error(request, "Não foi possível excluir: existem outros registros vinculados a este.")
     if recurso == "pagamentos":
         return redirect("financeiro")
     return redirect("lista", recurso=recurso)
-
-
-# ==================================================
-# FINANCEIRO (resumo + pagamentos)
-# ==================================================
-
-FORMAS = ["Dinheiro", "Pix", "Cartão", "Convênio"]
-STATUS = ["Concluído", "Pendente", "Cancelado"]
-
-
-@login_requerido
-def financeiro(request):
-    exigir(request, "pagamentos", "ver")
-    acoes = acoes_do_perfil(request.session.get("perfil"), "pagamentos")
-    base = aplicar_escopo(
-        request, RECURSOS["pagamentos"],
-        Pagamento.objects.select_related("agendamento__paciente", "status_pagamento"),
-    )
-
-    q = request.GET.get("q", "").strip()
-    pagamentos = base
-    if q:
-        pagamentos = base.filter(
-            Q(agendamento__paciente__nome__icontains=q)
-            | Q(agendamento__paciente__cpf__icontains=q)
-            | Q(descricao__icontains=q)
-        )
-
-    def soma(status):
-        return Sum("valor", filter=Q(status_pagamento__descricao=status))
-
-    # o resumo considera todos os pagamentos, mesmo com a busca ativa
-    resumo = base.aggregate(
-        recebido=soma("Concluído"), pendente=soma("Pendente"),
-        cancelado=soma("Cancelado"), quantidade=Count("pk"),
-    )
-    for chave in ("recebido", "pendente", "cancelado"):
-        resumo[chave] = resumo[chave] or Decimal("0")
-    resumo["total"] = resumo["recebido"] + resumo["pendente"] + resumo["cancelado"]
-
-    return render(request, "financeiro.html", {
-        "ativo": "pagamentos", "resumo": resumo, "q": q,
-        "pode_criar": "criar" in acoes, "pode_excluir": "excluir" in acoes,
-        "pode_pagar": "pagar" in acoes,
-        "eh_paciente": chave_perfil(request.session.get("perfil")) == _n(PERFIL_PACIENTE),
-        "pagamentos": pagamentos.order_by("-data_pagamento", "-id_pagamento"),
-    })
-
-
-class AgendamentoChoice(forms.ModelChoiceField):
-    def label_from_instance(self, ag):
-        return f"{ag.tipo} - {ag.paciente.nome} ({ag.paciente.cpf}) - {ag.data_hora:%d/%m/%Y %H:%M}"
-
-
-class PagamentoForm(forms.ModelForm):
-    agendamento = AgendamentoChoice(
-        queryset=Agendamento.objects.select_related("paciente").order_by("-data_hora"),
-        label="Consulta do paciente",
-    )
-    valor = forms.DecimalField(
-        min_value=Decimal("0.01"), max_digits=10, decimal_places=2,
-        localize=True, label="Valor (R$)",
-        error_messages={"min_value": "O valor deve ser maior que zero."},
-    )
-    forma_pagamento = forms.ChoiceField(choices=[(f, f) for f in FORMAS], label="Forma de pagamento")
-    status_pagamento = forms.ModelChoiceField(
-        queryset=StatusPagamento.objects.filter(descricao__in=STATUS), label="Status",
-    )
-    data_pagamento = forms.DateField(
-        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"), label="Data do pagamento",
-    )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["status_pagamento"].label_from_instance = rotulo
-
-    class Meta:
-        model = Pagamento
-        fields = ["agendamento", "descricao", "valor", "forma_pagamento", "status_pagamento", "data_pagamento"]
-        labels = {"descricao": "Descrição (consulta, exame, etc.)"}
-
-
-@login_requerido
-def novo_pagamento(request):
-    exigir(request, "pagamentos", "criar")
-    form = PagamentoForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Pagamento registrado com sucesso.")
-        return redirect("financeiro")
-    return render(request, "form.html", {
-        "form": form, "recurso": "pagamentos", "ativo": "pagamentos",
-        "titulo": "Registrar pagamento", "voltar": reverse("financeiro"),
-    })
 
 
 # ==================================================
@@ -1177,6 +1564,295 @@ def data_local(valor):
     return valor.date()
 
 
+# ==================================================
+# FINANCEIRO (resumo + pagamentos)
+# ==================================================
+
+FORMAS = ["Dinheiro", "Pix", "Cartão", "Convênio"]
+
+# Formas oferecidas ao paciente. "Pix" escrito igual ao da recepção, para os
+# relatórios não separarem "PIX" e "Pix" como se fossem formas diferentes.
+FORMAS_PAGAMENTO_PACIENTE = [
+    "Pix",
+    "Cartão de crédito",
+    "Cartão de débito",
+]
+
+STATUS = ["Concluído", "Pendente", "Cancelado"]
+
+VALOR_CONSULTA = Decimal("60.00")
+
+# Nomes aceitos na tabela status_pagamento (o primeiro é o criado se não existir)
+NOMES_PGTO_CONCLUIDO = ("Concluído", "Concluido", "Pago")
+NOMES_PGTO_PENDENTE = ("Pendente",)
+NOMES_PGTO_CANCELADO = ("Cancelado", "Cancelada")
+
+
+def filtro_status_pagamento(nomes):
+    filtro = Q()
+    for nome in nomes:
+        filtro |= Q(status_pagamento__descricao__iexact=nome)
+    return filtro
+
+
+def eh_status_pagamento(pagamento, nomes):
+    return _n(pagamento.status_pagamento.descricao) in {_n(n) for n in nomes}
+
+
+def obter_status_pagamento(nome):
+    return (
+        StatusPagamento.objects.filter(descricao__iexact=nome).first()
+        or StatusPagamento.objects.create(descricao=nome)
+    )
+
+
+def pagamento_ativo_existe(agendamento):
+    """Já existe pagamento (pendente ou concluído) para este atendimento?"""
+    return (
+        Pagamento.objects.filter(agendamento=agendamento)
+        .exclude(filtro_status_pagamento(NOMES_PGTO_CANCELADO))
+        .exists()
+    )
+
+
+def classe_status_pagamento(pagamento):
+    if eh_status_pagamento(pagamento, NOMES_PGTO_CONCLUIDO):
+        return "badge-ok"
+    if eh_status_pagamento(pagamento, NOMES_PGTO_PENDENTE):
+        return "badge-warn"
+    return "badge-off"
+
+
+@login_requerido
+def financeiro(request):
+    exigir(request, "pagamentos", "ver")
+    acoes = acoes_do_perfil(request.session.get("perfil"), "pagamentos")
+    base = queryset_visivel(request, "pagamentos").select_related(
+        "agendamento__paciente", "status_pagamento"
+    )
+
+    q = request.GET.get("q", "").strip()
+    pagamentos = base
+    if q:
+        pagamentos = base.filter(
+            Q(agendamento__paciente__nome__icontains=q)
+            | Q(agendamento__paciente__cpf__icontains=q)
+            | Q(descricao__icontains=q)
+        )
+
+    def soma(nomes):
+        return Sum("valor", filter=filtro_status_pagamento(nomes))
+
+    # o resumo considera todos os pagamentos, mesmo com a busca ativa
+    resumo = base.aggregate(
+        recebido=soma(NOMES_PGTO_CONCLUIDO), pendente=soma(NOMES_PGTO_PENDENTE),
+        cancelado=soma(NOMES_PGTO_CANCELADO), quantidade=Count("pk"),
+    )
+    for chave in ("recebido", "pendente", "cancelado"):
+        resumo[chave] = resumo[chave] or Decimal("0")
+    resumo["total"] = resumo["recebido"] + resumo["pendente"] + resumo["cancelado"]
+
+    pagina = paginar(request, pagamentos.order_by("-data_pagamento", "-id_pagamento"))
+    itens = list(pagina.object_list)
+    for p in itens:
+        p.classe_status = classe_status_pagamento(p)
+        p.esta_pendente = eh_status_pagamento(p, NOMES_PGTO_PENDENTE)
+        p.esta_cancelado = eh_status_pagamento(p, NOMES_PGTO_CANCELADO)
+
+    return render(request, "financeiro.html", {
+        "ativo": "pagamentos", "resumo": resumo, "q": q,
+        "pode_criar": "criar" in acoes, "pode_excluir": "excluir" in acoes,
+        "pode_cancelar": "cancelar" in acoes,
+        "pode_pagar": "pagar" in acoes,
+        "eh_paciente": chave_perfil(request.session.get("perfil")) == _n(PERFIL_PACIENTE),
+        "pagamentos": itens,
+        "pagina": pagina,
+    })
+
+
+class AgendamentoChoice(forms.ModelChoiceField):
+    def label_from_instance(self, ag):
+        # formatar() converte para o horário local (um f-string direto mostraria UTC)
+        return f"{ag.tipo} - {ag.paciente.nome or ag.paciente.cpf} ({ag.paciente.cpf}) - {descrever_data_hora(ag)}"
+
+
+def descrever_data_hora(ag):
+    """Solicitações ainda não têm horário: só a data pedida."""
+    if eh_status(ag, NOMES_SOLICITADA):
+        return f"{data_local(ag.data_hora):%d/%m/%Y} (horário a definir)"
+    return formatar(ag.data_hora)
+
+
+class PagamentoForm(forms.ModelForm):
+    # só atendimentos que podem ser cobrados (nem solicitação pendente, nem cancelado)
+    agendamento = AgendamentoChoice(
+        queryset=(
+            Agendamento.objects.select_related("paciente", "status")
+            .exclude(filtro_status(NOMES_CANCELADA)).exclude(filtro_status(NOMES_SOLICITADA))
+            .order_by("-data_hora")
+        ),
+        label="Consulta do paciente",
+    )
+    valor = forms.DecimalField(
+        min_value=Decimal("0.01"), max_digits=10, decimal_places=2,
+        localize=True, label="Valor (R$)",
+        error_messages={"min_value": "O valor deve ser maior que zero."},
+    )
+    forma_pagamento = forms.ChoiceField(choices=[(f, f) for f in FORMAS], label="Forma de pagamento")
+    status_pagamento = forms.ModelChoiceField(
+        queryset=StatusPagamento.objects.filter(descricao__in=STATUS), label="Status",
+    )
+    data_pagamento = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"), label="Data do pagamento",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # garante que "Concluído", "Pendente" e "Cancelado" existam para escolher
+        if StatusPagamento.objects.filter(descricao__in=STATUS).count() < len(STATUS):
+            for nome in STATUS:
+                obter_status_pagamento(nome)
+        self.fields["status_pagamento"].label_from_instance = rotulo
+
+    def clean(self):
+        dados = super().clean()
+        ag, status = dados.get("agendamento"), dados.get("status_pagamento")
+        cancelando = status is not None and _n(status.descricao) in {_n(n) for n in NOMES_PGTO_CANCELADO}
+        if ag and not cancelando and pagamento_ativo_existe(ag):
+            self.add_error("agendamento", "Esta consulta já possui um pagamento registrado.")
+        return dados
+
+    class Meta:
+        model = Pagamento
+        fields = ["agendamento", "descricao", "valor", "forma_pagamento", "status_pagamento", "data_pagamento"]
+        labels = {"descricao": "Descrição (consulta, exame, etc.)"}
+
+
+@login_requerido
+def novo_pagamento(request):
+    exigir(request, "pagamentos", "criar")
+    form = PagamentoForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        pagamento = form.save()
+        registrar_auditoria(request, "pagamento_registrado", f"id={pagamento.pk}")
+        messages.success(request, "Pagamento registrado com sucesso.")
+        return redirect("financeiro")
+    return render(request, "form.html", {
+        "form": form, "recurso": "pagamentos", "ativo": "pagamentos",
+        "titulo": "Registrar pagamento", "voltar": reverse("financeiro"),
+    })
+
+
+@login_requerido
+@require_POST
+def confirmar_pagamento(request, pk):
+    exigir(request, "pagamentos", "criar")
+    pag = get_object_or_404(Pagamento.objects.select_related("status_pagamento"), pk=pk)
+    if eh_status_pagamento(pag, NOMES_PGTO_PENDENTE):
+        pag.status_pagamento = obter_status_pagamento("Concluído")
+        pag.save(update_fields=["status_pagamento"])
+        registrar_auditoria(request, "pagamento_confirmado", f"id={pag.pk}")
+        messages.success(request, "Pagamento confirmado.")
+    else:
+        messages.warning(request, "Este pagamento não está pendente.")
+    return redirect("financeiro")
+
+
+@login_requerido
+@require_POST
+def cancelar_pagamento(request, pk):
+    """Cancela sem apagar: o registro continua no histórico financeiro."""
+    exigir(request, "pagamentos", "cancelar")
+    pag = get_object_or_404(Pagamento.objects.select_related("status_pagamento"), pk=pk)
+    if eh_status_pagamento(pag, NOMES_PGTO_CANCELADO):
+        messages.warning(request, "Este pagamento já está cancelado.")
+    else:
+        pag.status_pagamento = obter_status_pagamento("Cancelado")
+        pag.save(update_fields=["status_pagamento"])
+        registrar_auditoria(request, "pagamento_cancelado", f"id={pag.pk}")
+        messages.success(request, "Pagamento cancelado.")
+    return redirect("financeiro")
+
+
+
+
+# ---- agenda dos médicos (tabela horarios_medicos) ---------------------------
+DIAS_SEMANA = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira",
+               "Sexta-feira", "Sábado", "Domingo"]
+_INDICE_DIA = {"seg": 0, "ter": 1, "qua": 2, "qui": 3, "sex": 4, "sab": 5, "dom": 6}
+
+
+def indice_dia_semana(texto):
+    """'Segunda', 'segunda-feira', 'SEG'... -> 0 (segunda) a 6 (domingo)."""
+    return _INDICE_DIA.get(_n(texto)[:3])
+
+
+def medico_atende_em(medico, quando):
+    """O horário está dentro da agenda cadastrada do médico? Se o médico ainda
+    não tem nenhum horário cadastrado, não há restrição (comportamento antigo)."""
+    horarios = list(HorarioMedico.objects.filter(medico=medico))
+    if not horarios:
+        return True
+    local = timezone.localtime(quando) if timezone.is_aware(quando) else quando
+    return any(
+        indice_dia_semana(h.dia_semana) == local.weekday()
+        and h.hora_inicio <= local.time() < h.hora_fim
+        for h in horarios
+    )
+
+
+def medico_ocupado(medico, quando, ignorar_pk=None):
+    ocupados = (
+        Agendamento.objects.filter(medico=medico, data_hora=quando)
+        .exclude(filtro_status(NOMES_CANCELADA)).exclude(filtro_status(NOMES_SOLICITADA))
+    )
+    if ignorar_pk:
+        ocupados = ocupados.exclude(pk=ignorar_pk)
+    return ocupados.exists()
+
+
+class HorarioForm(forms.ModelForm):
+    """Horário de atendimento de um médico (alimenta a validação ao agendar)."""
+
+    dia_semana = forms.ChoiceField(choices=[(d, d) for d in DIAS_SEMANA], label="Dia da semana")
+    hora_inicio = forms.TimeField(widget=forms.TimeInput(attrs={"type": "time"}, format="%H:%M"), label="Início")
+    hora_fim = forms.TimeField(widget=forms.TimeInput(attrs={"type": "time"}, format="%H:%M"), label="Fim")
+
+    class Meta:
+        model = HorarioMedico
+        fields = ["medico", "dia_semana", "hora_inicio", "hora_fim"]
+        labels = {"medico": "Médico"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["medico"].label_from_instance = rotulo
+        # registros antigos podem ter outra grafia ("Segunda"): mostra o dia certo na lista
+        indice = indice_dia_semana(self.initial.get("dia_semana"))
+        if indice is not None:
+            self.initial["dia_semana"] = DIAS_SEMANA[indice]
+
+    def clean(self):
+        dados = super().clean()
+        medico, dia = dados.get("medico"), dados.get("dia_semana")
+        inicio, fim = dados.get("hora_inicio"), dados.get("hora_fim")
+        if inicio and fim:
+            if fim <= inicio:
+                self.add_error("hora_fim", "O fim precisa ser depois do início.")
+            elif medico and dia:
+                outros = HorarioMedico.objects.filter(medico=medico)
+                if self.instance and self.instance.pk:
+                    outros = outros.exclude(pk=self.instance.pk)
+                for h in outros:
+                    if indice_dia_semana(h.dia_semana) == indice_dia_semana(dia) and h.hora_inicio < fim and inicio < h.hora_fim:
+                        self.add_error(None, "Esse horário se sobrepõe a outro já cadastrado para o médico nesse dia.")
+                        break
+        return dados
+
+
+RECURSOS["horarios"]["form"] = HorarioForm
+EDITAVEIS["horarios"] = HorarioForm
+
+
 class EscolhaEspecialidadeForm(forms.Form):
     tipo = forms.ChoiceField(choices=TIPOS_ATENDIMENTO, label="Tipo de atendimento")
     especialidade = forms.ModelChoiceField(
@@ -1199,11 +1875,13 @@ class EscolhaEspecialidadeForm(forms.Form):
             if quando <= agora_como(quando):
                 self.add_error("data_hora", "Escolha uma data e hora futuras.")
             else:
-                # primeiro médico ativo da especialidade que esteja livre nesse horário
-                ocupados = (Agendamento.objects.filter(data_hora=quando)
-                            .exclude(filtro_status(NOMES_CANCELADA)).values("medico_id"))
-                medico = (Medico.objects.filter(ativo=True, medicoespecialidade__especialidade=esp)
-                          .exclude(pk__in=ocupados).order_by("nome").first())
+                # primeiro médico ativo da especialidade que esteja livre e em horário de atendimento
+                candidatos = (Medico.objects.filter(ativo=True, medicoespecialidade__especialidade=esp)
+                              .distinct().order_by("nome"))
+                medico = next(
+                    (m for m in candidatos if not medico_ocupado(m, quando) and medico_atende_em(m, quando)),
+                    None,
+                )
                 if medico is None:
                     self.add_error("data_hora", f"Nenhum médico de {esp.nome} disponível nesse horário. Escolha outro.")
                 else:
@@ -1229,7 +1907,7 @@ class SolicitarConsultaForm(forms.Form):
         dados = super().clean()
         esp, data = dados.get("especialidade"), dados.get("data")
         if esp and data:
-            if data < dt.date.today():
+            if data < hoje_local():
                 self.add_error("data", "Escolha uma data de hoje em diante.")
             else:
                 # médico provisório da especialidade; a recepção pode trocá-lo ao aceitar
@@ -1244,8 +1922,8 @@ class SolicitarConsultaForm(forms.Form):
 @login_requerido
 def solicitar_consulta(request):
     exigir(request, "consultas", "solicitar")
-    
-# Busca diretamente o usuário autenticado e seu paciente vinculado.
+
+    # Busca diretamente o usuário autenticado e seu paciente vinculado.
     usuario = (
         Usuario.objects
         .select_related("paciente")
@@ -1265,12 +1943,27 @@ def solicitar_consulta(request):
 
     form = SolicitarConsultaForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        Agendamento.objects.create(
-            paciente=paciente, medico=form.cleaned_data["medico"],
-            data_hora=inicio_do_dia(form.cleaned_data["data"]), status=obter_status(NOMES_SOLICITADA),
-            tipo=form.cleaned_data["tipo"],
+        dados = form.cleaned_data
+        # evita o mesmo pedido repetido (duplo clique, reenvio da página...)
+        repetida = (
+            Agendamento.objects.filter(
+                paciente=paciente, tipo=dados["tipo"],
+                medico__medicoespecialidade__especialidade=dados["especialidade"],
+                data_hora__gte=inicio_do_dia(dados["data"]),
+                data_hora__lt=inicio_do_dia(dados["data"] + dt.timedelta(days=1)),
+            ).exclude(filtro_status(NOMES_CANCELADA)).exists()
         )
-        messages.success(request, f"Solicitação de {form.cleaned_data['tipo'].lower()} enviada para {form.cleaned_data['especialidade'].nome} em {form.cleaned_data['data']:%d/%m/%Y}. A recepção vai definir o horário e confirmar.")
+        if repetida:
+            messages.warning(request, "Você já tem uma solicitação ou consulta desse tipo, nessa especialidade e data.")
+            return redirect("lista", recurso="consultas")
+
+        ag = Agendamento.objects.create(
+            paciente=paciente, medico=dados["medico"],
+            data_hora=inicio_do_dia(dados["data"]), status=obter_status(NOMES_SOLICITADA),
+            tipo=dados["tipo"],
+        )
+        registrar_auditoria(request, "consulta_solicitada", f"id={ag.pk}")
+        messages.success(request, f"Solicitação de {dados['tipo'].lower()} enviada para {dados['especialidade'].nome} em {dados['data']:%d/%m/%Y}. A recepção vai definir o horário e confirmar.")
         return redirect("lista", recurso="consultas")
     return render(request, "form.html", {
         "form": form, "recurso": "consultas", "ativo": "consultas",
@@ -1288,20 +1981,55 @@ def responder_consulta(request, pk, acao):
     if not eh_status(ag, NOMES_SOLICITADA):
         messages.warning(request, "Esta solicitação já foi respondida.")
     elif acao == "aceitar":
-        ocupado = (
-            Agendamento.objects.filter(medico=ag.medico, data_hora=ag.data_hora).exclude(pk=ag.pk)
-            .exclude(filtro_status(NOMES_CANCELADA)).exclude(filtro_status(NOMES_SOLICITADA)).exists()
-        )
-        if ocupado:
+        if medico_ocupado(ag.medico, ag.data_hora, ignorar_pk=ag.pk):
             messages.error(request, "Não foi possível aceitar: o médico já tem consulta marcada nesse horário.")
         else:
             ag.status = obter_status(NOMES_CONFIRMADA)
             ag.save(update_fields=["status"])
+            registrar_auditoria(request, "consulta_aceita", f"id={ag.pk}")
             messages.success(request, "Consulta aceita e agendada.")
     else:
         ag.status = obter_status(NOMES_CANCELADA)
         ag.save(update_fields=["status"])
+        registrar_auditoria(request, "consulta_recusada", f"id={ag.pk}")
         messages.success(request, "Solicitação recusada.")
+    return redirect("lista", recurso="consultas")
+
+
+@login_requerido
+@require_POST
+def cancelar_consulta(request, pk):
+    """Cancela uma consulta/exame. O paciente cancela só os seus; a recepção, qualquer um."""
+    exigir(request, "consultas", "cancelar")
+    ag = get_object_or_404(
+        queryset_visivel(request, "consultas").select_related("status", "paciente"), pk=pk
+    )
+
+    if eh_status(ag, NOMES_CANCELADA):
+        messages.warning(request, "Este atendimento já está cancelado.")
+    elif data_local(ag.data_hora) < hoje_local():
+        messages.error(request, "Não é possível cancelar um atendimento que já passou.")
+    else:
+        pagamentos = list(
+            Pagamento.objects.filter(agendamento=ag)
+            .exclude(filtro_status_pagamento(NOMES_PGTO_CANCELADO))
+            .select_related("status_pagamento")
+        )
+        if any(eh_status_pagamento(p, NOMES_PGTO_CONCLUIDO) for p in pagamentos):
+            messages.error(
+                request,
+                "Há pagamento concluído para este atendimento. Cancele o pagamento no Financeiro "
+                "(a recepção faz isso) antes de cancelar o atendimento."
+            )
+        else:
+            with transaction.atomic():
+                for p in pagamentos:  # pagamentos ainda pendentes deixam de valer
+                    p.status_pagamento = obter_status_pagamento("Cancelado")
+                    p.save(update_fields=["status_pagamento"])
+                ag.status = obter_status(NOMES_CANCELADA)
+                ag.save(update_fields=["status"])
+            registrar_auditoria(request, "consulta_cancelada", f"id={ag.pk}")
+            messages.success(request, "Atendimento cancelado.")
     return redirect("lista", recurso="consultas")
 
 
@@ -1310,20 +2038,49 @@ def responder_consulta(request, pk, acao):
 # ==================================================
 
 class PagamentoPacienteForm(forms.Form):
-    agendamento = AgendamentoChoice(queryset=Agendamento.objects.none(), label="Consulta a pagar")
-    valor = forms.DecimalField(
-        min_value=Decimal("0.01"), max_digits=10, decimal_places=2, localize=True, label="Valor (R$)",
-        error_messages={"min_value": "O valor deve ser maior que zero."},
+    agendamento = AgendamentoChoice(
+        queryset=Agendamento.objects.none(),
+        label="Consulta a pagar"
     )
-    forma_pagamento = forms.ChoiceField(choices=[(f, f) for f in FORMAS], label="Forma de pagamento")
+
+    valor = forms.DecimalField(
+        min_value=Decimal("0.01"),
+        max_digits=10,
+        decimal_places=2,
+        initial=VALOR_CONSULTA,
+        label="Valor (R$)",
+        widget=forms.NumberInput(attrs={
+            "readonly": "readonly",
+            "step": "0.01",
+        }),
+        error_messages={
+            "min_value": "O valor deve ser maior que zero."
+        },
+    )
+
+    forma_pagamento = forms.ChoiceField(
+        choices=[(f, f) for f in FORMAS_PAGAMENTO_PACIENTE],
+        label="Forma de pagamento"
+    )
 
     def __init__(self, *args, cpf=None, **kwargs):
         super().__init__(*args, **kwargs)
+
         self.fields["agendamento"].queryset = (
-            Agendamento.objects.select_related("paciente", "status").filter(paciente=cpf)
-            .exclude(filtro_status(NOMES_CANCELADA)).exclude(filtro_status(NOMES_SOLICITADA))
+            Agendamento.objects.select_related(
+                "paciente", "status"
+            )
+            .filter(paciente=cpf)
+            .exclude(filtro_status(NOMES_CANCELADA))
+            .exclude(filtro_status(NOMES_SOLICITADA))
             .order_by("-data_hora")
         )
+
+    def clean_agendamento(self):
+        ag = self.cleaned_data["agendamento"]
+        if pagamento_ativo_existe(ag):
+            raise ValidationError("Esta consulta já possui um pagamento registrado.")
+        return ag
 
 
 @login_requerido
@@ -1333,13 +2090,12 @@ def pagar(request):
     form = PagamentoPacienteForm(request.POST or None, cpf=cpf)
     if request.method == "POST" and form.is_valid():
         ag = form.cleaned_data["agendamento"]
-        pendente = (StatusPagamento.objects.filter(descricao__iexact="Pendente").first()
-                    or StatusPagamento.objects.create(descricao="Pendente"))
-        Pagamento.objects.create(
+        pagamento = Pagamento.objects.create(
             agendamento=ag, descricao=f"{ag.tipo} de {formatar(ag.data_hora)}",
-            valor=form.cleaned_data["valor"], forma_pagamento=form.cleaned_data["forma_pagamento"],
-            status_pagamento=pendente, data_pagamento=dt.date.today(),
+            valor=VALOR_CONSULTA, forma_pagamento=form.cleaned_data["forma_pagamento"],
+            status_pagamento=obter_status_pagamento("Pendente"), data_pagamento=hoje_local(),
         )
+        registrar_auditoria(request, "pagamento_enviado", f"id={pagamento.pk}")
         messages.success(request, "Pagamento enviado! A recepção irá confirmar o recebimento.")
         return redirect("financeiro")
     return render(request, "form.html", {
@@ -1349,18 +2105,92 @@ def pagar(request):
 
 
 @login_requerido
-@require_POST
-def confirmar_pagamento(request, pk):
-    exigir(request, "pagamentos", "criar")
-    pag = get_object_or_404(Pagamento.objects.select_related("status_pagamento"), pk=pk)
-    if _n(pag.status_pagamento.descricao) == "pendente":
-        pag.status_pagamento = (StatusPagamento.objects.filter(descricao__iexact="Concluído").first()
-                                or StatusPagamento.objects.create(descricao="Concluído"))
-        pag.save(update_fields=["status_pagamento"])
-        messages.success(request, "Pagamento confirmado.")
-    else:
-        messages.warning(request, "Este pagamento não está pendente.")
-    return redirect("financeiro")
+def pagar_consulta(request):
+    """
+    Versão em cartões da tela de pagamento: o paciente escolhe a forma de
+    pagamento em cada consulta. O pagamento fica pendente até a recepção
+    confirmar o recebimento.
+    """
+    exigir(request, "pagamentos", "pagar")
+
+    cpf = cpf_da_sessao(request)
+    if not cpf:
+        messages.error(request, "Paciente não identificado.")
+        return redirect("dashboard")
+
+    if request.method == "POST":
+        forma = request.POST.get("forma_pagamento")
+
+        if forma not in FORMAS_PAGAMENTO_PACIENTE:
+            messages.error(request, "Forma de pagamento inválida.")
+            return redirect("pagar_consulta")
+
+        try:
+            agendamento = get_object_or_404(
+                Agendamento.objects.select_related("status"),
+                pk=int(request.POST.get("agendamento_id", "")),
+                paciente_id=cpf,
+            )
+        except (TypeError, ValueError):
+            raise Http404
+
+        if eh_status(agendamento, NOMES_SOLICITADA) or eh_status(agendamento, NOMES_CANCELADA):
+            messages.error(request, "Não é possível pagar um atendimento ainda não confirmado ou cancelado.")
+            return redirect("pagar_consulta")
+
+        if pagamento_ativo_existe(agendamento):
+            messages.warning(request, "Esta consulta já possui um pagamento registrado.")
+            return redirect("pagar_consulta")
+
+        pagamento = Pagamento.objects.create(
+            agendamento=agendamento,
+            descricao="Pagamento de consulta médica",
+            valor=VALOR_CONSULTA,
+            forma_pagamento=forma,
+            status_pagamento=obter_status_pagamento("Pendente"),
+            data_pagamento=hoje_local(),
+        )
+        registrar_auditoria(request, "pagamento_enviado", f"id={pagamento.pk}")
+
+        messages.success(
+            request,
+            "Solicitação de pagamento registrada. "
+            "Aguardando confirmação da transação."
+        )
+        return redirect("pagar_consulta")
+
+    agendamentos = list(
+        Agendamento.objects.filter(paciente_id=cpf)
+        .exclude(filtro_status(NOMES_CANCELADA))
+        .exclude(filtro_status(NOMES_SOLICITADA))
+        .select_related("medico", "status")
+        .order_by("-data_hora")
+    )
+    ja_pagos = set(
+        Pagamento.objects.filter(agendamento__in=[a.pk for a in agendamentos])
+        .exclude(filtro_status_pagamento(NOMES_PGTO_CANCELADO))
+        .values_list("agendamento_id", flat=True)
+    )
+    for a in agendamentos:
+        a.ja_pago = a.pk in ja_pagos
+
+    pagamentos = (
+        Pagamento.objects.filter(agendamento__paciente_id=cpf)
+        .select_related("agendamento", "status_pagamento")
+        .order_by("-data_pagamento")
+    )
+
+    return render(
+        request,
+        "pagamento.html",
+        {
+            "ativo": "pagamentos",
+            "agendamentos": agendamentos,
+            "pagamentos": pagamentos,
+            "valor_consulta": VALOR_CONSULTA,
+            "formas_pagamento": FORMAS_PAGAMENTO_PACIENTE,
+        }
+    )
 
 
 class AgendarConsultaForm(EscolhaEspecialidadeForm):
@@ -1376,10 +2206,15 @@ class AgendarConsultaForm(EscolhaEspecialidadeForm):
 
     def save(self):
         dados = self.cleaned_data
-        return Agendamento.objects.create(
-            paciente=dados["paciente"], medico=dados["medico"],
-            data_hora=dados["data_hora"], status=obter_status(NOMES_CONFIRMADA), tipo=dados["tipo"],
-        )
+        with transaction.atomic():
+            # trava a linha do médico: duas recepcionistas não marcam o mesmo horário ao mesmo tempo
+            list(Medico.objects.select_for_update().filter(pk=dados["medico"].pk))
+            if medico_ocupado(dados["medico"], dados["data_hora"]):
+                raise ConflitoDeHorario("Esse horário acabou de ser preenchido. Escolha outro horário.")
+            return Agendamento.objects.create(
+                paciente=dados["paciente"], medico=dados["medico"],
+                data_hora=dados["data_hora"], status=obter_status(NOMES_CONFIRMADA), tipo=dados["tipo"],
+            )
 
 
 RECURSOS["consultas"]["form"] = AgendarConsultaForm
@@ -1408,9 +2243,10 @@ class AceitarConsultaForm(forms.Form):
             quando = combinar(data_local(self.agendamento.data_hora), hora)
             if quando <= agora_como(quando):
                 self.add_error("horario", "Esse horário já passou.")
-            elif (Agendamento.objects.filter(medico=medico, data_hora=quando).exclude(pk=self.agendamento.pk)
-                  .exclude(filtro_status(NOMES_CANCELADA)).exclude(filtro_status(NOMES_SOLICITADA)).exists()):
+            elif medico_ocupado(medico, quando, ignorar_pk=self.agendamento.pk):
                 self.add_error("horario", "Esse médico já tem consulta nesse horário. Escolha outro horário ou outro médico.")
+            elif not medico_atende_em(medico, quando):
+                self.add_error("horario", "Esse médico não atende nesse dia/horário (veja \"Horários dos médicos\"). Escolha outro horário ou outro médico.")
             else:
                 dados["quando"] = quando
         return dados
@@ -1426,10 +2262,17 @@ def aceitar_consulta(request, pk):
 
     form = AceitarConsultaForm(request.POST or None, agendamento=ag)
     if request.method == "POST" and form.is_valid():
-        ag.medico = form.cleaned_data["medico"]
-        ag.data_hora = form.cleaned_data["quando"]
-        ag.status = obter_status(NOMES_CONFIRMADA)
-        ag.save(update_fields=["medico", "data_hora", "status"])
+        medico, quando = form.cleaned_data["medico"], form.cleaned_data["quando"]
+        with transaction.atomic():
+            list(Medico.objects.select_for_update().filter(pk=medico.pk))
+            if medico_ocupado(medico, quando, ignorar_pk=ag.pk):
+                messages.error(request, "Esse horário acabou de ser preenchido. Escolha outro horário.")
+                return redirect("aceitar_consulta", pk=ag.pk)
+            ag.medico = medico
+            ag.data_hora = quando
+            ag.status = obter_status(NOMES_CONFIRMADA)
+            ag.save(update_fields=["medico", "data_hora", "status"])
+        registrar_auditoria(request, "consulta_aceita", f"id={ag.pk}")
         messages.success(request, "Consulta confirmada com horário e médico definidos.")
         return redirect("lista", recurso="consultas")
 
@@ -1439,24 +2282,11 @@ def aceitar_consulta(request, pk):
         "titulo": f"Aceitar {ag.tipo.lower()} de {ag.paciente.nome or ag.paciente.cpf} em {dia:%d/%m/%Y}",
         "botao": "Confirmar consulta", "voltar": reverse("lista", args=["consultas"]),
     })
-    
+
 
 def cadastro_publico(request):
-    import hashlib
-    import secrets
-    from datetime import date
-
-    from django.contrib import messages
-    from django.db import transaction, IntegrityError
-    from django.shortcuts import render, redirect
-
-    from sistema_clinica.funcionalidades.regex import (
-        validar_nome,
-        validar_email,
-        validar_senha,
-    )
-
-    from func_django.models import Usuario, Perfil, func_django
+    if request.session.get("username"):
+        return redirect("dashboard")
 
     if request.method == "GET":
         return render(request, "cadastro.html")
@@ -1466,9 +2296,9 @@ def cadastro_publico(request):
     senha = request.POST.get("senha", "")
     confirmar_senha = request.POST.get("confirmar_senha", "")
 
-    cpf = "".join(filter(str.isdigit, request.POST.get("cpf", "")))
+    cpf = somente_digitos(request.POST.get("cpf", ""))
     nome = request.POST.get("nome", "").strip()
-    telefone = "".join(filter(str.isdigit, request.POST.get("telefone", "")))
+    telefone = somente_digitos(request.POST.get("telefone", ""))
     nascimento = request.POST.get("data_nascimento", "").strip()
 
     dados = {
@@ -1512,8 +2342,8 @@ def cadastro_publico(request):
         return retornar_erro("As senhas não coincidem!")
 
     # Dados do paciente
-    if len(cpf) != 11:
-        return retornar_erro("Informe um CPF com 11 números!")
+    if not cpf_valido(cpf):
+        return retornar_erro("Informe um CPF válido com 11 números!")
 
     if not validar_nome(nome):
         return retornar_erro("Nome completo inválido!")
@@ -1522,18 +2352,21 @@ def cadastro_publico(request):
         return retornar_erro("Informe um telefone válido com DDD!")
 
     if func_django.objects.filter(cpf=cpf).exists():
-        return retornar_erro("Este CPF já está cadastrado!")
+        return retornar_erro(
+            "Este CPF já está cadastrado! Se você já foi atendido(a) na clínica, "
+            "peça à recepção para criar o seu acesso."
+        )
 
     try:
-        data_nascimento = date.fromisoformat(nascimento)
+        data_nascimento = dt.date.fromisoformat(nascimento)
     except ValueError:
         return retornar_erro("Data de nascimento inválida!")
 
-    if data_nascimento >= date.today():
+    if data_nascimento >= hoje_local():
         return retornar_erro("A data de nascimento deve ser anterior à data atual!")
 
     # Perfil fixo para cadastros públicos
-    perfil = Perfil.objects.filter(nome_perfil__iexact="Paciente").first()
+    perfil = obter_perfil_paciente()
 
     if not perfil:
         return retornar_erro("Perfil Paciente não encontrado no banco de dados!")
@@ -1545,7 +2378,7 @@ def cadastro_publico(request):
         "sha256",
         senha.encode("utf-8"),
         salt,
-        600000
+        ITERACOES
     ).hex()
 
     try:
@@ -1576,10 +2409,12 @@ def cadastro_publico(request):
         )
 
     except Exception:
+        logging.getLogger(__name__).exception("Falha no cadastro público")
         return retornar_erro(
             "Ocorreu um erro ao criar sua conta. Tente novamente."
         )
 
+    registrar_auditoria(request, "cadastro_publico", f"cpf={cpf}")
     messages.success(
         request,
         "Conta criada com sucesso! Agora você pode entrar."
@@ -1587,24 +2422,45 @@ def cadastro_publico(request):
 
     return redirect("login")
 
+
 @login_requerido
 def detalhe_paciente(request, cpf):
-    exigir(request, "pacientes", "ver")
+
     perfil = request.session.get("perfil")
+    perfil_chave = chave_perfil(perfil)
+
+    # Paciente só pode acessar a própria ficha
+    if perfil_chave == _n(PERFIL_PACIENTE):
+
+        cpf_usuario = cpf_da_sessao(request)
+
+        if not cpf_usuario or cpf_usuario != cpf:
+            raise PermissionDenied
+
+    else:
+        exigir(request, "pacientes", "ver")
 
     paciente = get_object_or_404(
-        pacientes_visiveis(request),
+        pacientes_visiveis(request).select_related("medico"),
         cpf=cpf
     )
 
+    # Cada seção segue a mesma regra de visibilidade das listagens: a recepção vê
+    # agenda e financeiro, mas NÃO o conteúdo clínico; o médico vê só o que é dele.
     agendamentos = list(
-        Agendamento.objects.filter(paciente_id=cpf)
+        consultas_visiveis(request).filter(paciente_id=cpf)
         .select_related("medico", "status").order_by("-data_hora")
     )
-    prontuarios = list(
-        Prontuario.objects.filter(paciente_id=cpf)
-        .select_related("medico").order_by("-id_prontuario")
-    )
+    for a in agendamentos:
+        a.horario_a_definir = eh_status(a, NOMES_SOLICITADA)
+
+    pode_ver_prontuarios = "ver" in acoes_do_perfil(perfil, "prontuarios")
+    prontuarios = []
+    if pode_ver_prontuarios:
+        prontuarios = list(
+            queryset_visivel(request, "prontuarios").filter(paciente_id=cpf)
+            .select_related("medico").order_by("-id_prontuario")
+        )
     alergias = list(Alergia.objects.filter(paciente_id=cpf).order_by("descricao"))
 
     pode_ver_financeiro = "ver" in acoes_do_perfil(perfil, "pagamentos")
@@ -1615,6 +2471,8 @@ def detalhe_paciente(request, cpf):
             .select_related("agendamento", "status_pagamento").order_by("-data_pagamento")
         )
 
+    registrar_auditoria(request, "ver_paciente", f"cpf={cpf}")
+
     return render(request, "paciente_detalhe.html", {
         "paciente": paciente,
         "agendamentos": agendamentos,
@@ -1622,7 +2480,9 @@ def detalhe_paciente(request, cpf):
         "alergias": alergias,
         "pagamentos": pagamentos,
         "pode_ver_financeiro": pode_ver_financeiro,
-        "pode_criar_alergia": "criar" in acoes_do_perfil(perfil, "pacientes"),
+        "pode_ver_prontuarios": pode_ver_prontuarios,
+        "pode_gerir_alergia": "alergia" in acoes_do_perfil(perfil, "pacientes"),
+        "pode_editar": "editar" in acoes_do_perfil(perfil, "pacientes"),
         "total_consultas": sum(1 for a in agendamentos if (a.tipo or "").lower() == "consulta"),
         "total_exames": sum(1 for a in agendamentos if (a.tipo or "").lower() == "exame"),
         "total_prontuarios": len(prontuarios),
@@ -1632,13 +2492,33 @@ def detalhe_paciente(request, cpf):
 
 @login_requerido
 @require_POST
+@login_requerido
+@require_POST
 def adicionar_alergia(request, cpf):
 
-    exigir(request, "pacientes", "criar")
+    perfil = chave_perfil(request.session.get("perfil"))
 
-    pacientes = pacientes_visiveis(request)
+    # PACIENTE: só pode cadastrar alergias no próprio CPF
+    if perfil == _n(PERFIL_PACIENTE):
 
-    paciente = get_object_or_404(pacientes, cpf=cpf)
+        cpf_usuario = cpf_da_sessao(request)
+
+        if not cpf_usuario or cpf_usuario != cpf:
+            raise PermissionDenied
+
+        paciente = get_object_or_404(
+            func_django,
+            cpf=cpf_usuario
+        )
+
+    # DEMAIS PERFIS: continuam usando as permissões existentes
+    else:
+        exigir(request, "pacientes", "alergia")
+
+        paciente = get_object_or_404(
+            pacientes_visiveis(request),
+            cpf=cpf
+        )
 
     descricao = request.POST.get("descricao", "").strip()
 
@@ -1651,26 +2531,62 @@ def adicionar_alergia(request, cpf):
             "A descrição deve ter no máximo 300 caracteres."
         )
 
+    elif Alergia.objects.filter(
+        paciente=paciente,
+        descricao__iexact=descricao
+    ).exists():
+        messages.warning(
+            request,
+            "Essa alergia já está cadastrada para o paciente."
+        )
+
     else:
-        Alergia.objects.create(
+        alergia = Alergia.objects.create(
             paciente=paciente,
             descricao=descricao
         )
 
-        messages.success(request, "Alergia cadastrada com sucesso.")
+        registrar_auditoria(
+            request,
+            "alergia_adicionada",
+            f"cpf={cpf} id={alergia.pk}"
+        )
+
+        messages.success(
+            request,
+            "Alergia cadastrada com sucesso."
+        )
 
     return redirect("detalhe_paciente", cpf=cpf)
+
 
 @login_requerido
 @require_POST
 def excluir_alergia(request, cpf, pk):
 
-    exigir(request, "pacientes", "excluir")
+    perfil = chave_perfil(request.session.get("perfil"))
+    eh_paciente = perfil == _n(PERFIL_PACIENTE)
 
-    pacientes = pacientes_visiveis(request)
+    if eh_paciente:
+        # O paciente só pode excluir alergias do próprio cadastro
+        cpf_usuario = cpf_da_sessao(request)
 
-    paciente = get_object_or_404(pacientes, cpf=cpf)
-    
+        if not cpf_usuario or cpf_usuario != cpf:
+            raise PermissionDenied
+
+        paciente = get_object_or_404(
+            func_django,
+            cpf=cpf_usuario
+        )
+
+    else:
+        exigir(request, "pacientes", "alergia")
+
+        paciente = get_object_or_404(
+            pacientes_visiveis(request),
+            cpf=cpf
+        )
+
     alergia = get_object_or_404(
         Alergia,
         id_alergias=pk,
@@ -1679,9 +2595,30 @@ def excluir_alergia(request, cpf, pk):
 
     alergia.delete()
 
+    registrar_auditoria(
+        request,
+        "alergia_removida",
+        f"cpf={cpf} id={pk}"
+    )
+
     messages.success(request, "Alergia removida com sucesso.")
 
+    if eh_paciente:
+        return redirect("dashboard")
+
     return redirect("detalhe_paciente", cpf=cpf)
+
+
+
+def atalhos_do_perfil(perfil):
+    """Botões de acesso rápido do painel: só as telas que o perfil pode ver."""
+    atalhos = []
+    for recurso, cfg in RECURSOS.items():
+        if "ver" not in acoes_do_perfil(perfil, recurso):
+            continue
+        url = reverse("financeiro") if recurso == "pagamentos" else reverse("lista", args=[recurso])
+        atalhos.append({"titulo": cfg["titulo"], "url": url})
+    return atalhos
 
 
 @login_requerido
@@ -1700,13 +2637,16 @@ def dashboard(request):
         "prontuarios": [],
         "alergias": [],
         "pagamentos": [],
-        "consultas_hoje": 0,
+        # None = "não se aplica a este perfil" (o template só mostra o que não for None)
+        "consultas_hoje": None,
+        "proximas_consultas": [],
         "solicitacoes_pendentes": None,
-        "atalhos": [],
-        "total_pacientes": 0,
-        "total_medicos": 0,
-        "total_consultas": 0,
+        "atalhos": atalhos_do_perfil(perfil),
+        "total_pacientes": None,
+        "total_medicos": None,
+        "total_consultas": None,
     }
+    agora = timezone.now() if settings.USE_TZ else dt.datetime.now()
 
     # --------------------------------------------------
     # ÁREA DO PACIENTE
@@ -1726,12 +2666,14 @@ def dashboard(request):
             contexto["paciente_nao_vinculado"] = True
             return render(request, "dashboard.html", contexto)
 
-        agendamentos = (
+        agendamentos = list(
             Agendamento.objects
             .filter(paciente=paciente)
             .select_related("medico", "status")
             .order_by("-data_hora")
         )
+        for a in agendamentos:
+            a.horario_a_definir = eh_status(a, NOMES_SOLICITADA)
 
         prontuarios = (
             Prontuario.objects
@@ -1753,13 +2695,14 @@ def dashboard(request):
             .order_by("-data_pagamento")
         )
 
-        proxima_consulta = (
-            agendamentos
-            .filter(data_hora__gte=timezone.now())
-            .exclude(filtro_status(NOMES_CANCELADA))
-            .exclude(filtro_status(NOMES_SOLICITADA))
-            .order_by("data_hora")
-            .first()
+        proxima_consulta = next(
+            (
+                a for a in sorted(agendamentos, key=lambda x: x.data_hora)
+                if a.data_hora >= agora
+                and not eh_status(a, NOMES_CANCELADA)
+                and not eh_status(a, NOMES_SOLICITADA)
+            ),
+            None,
         )
 
         contexto.update({
@@ -1770,6 +2713,7 @@ def dashboard(request):
             "prontuarios": prontuarios,
             "alergias": alergias,
             "pagamentos": pagamentos,
+            "pode_gerir_alergia": True,
         })
 
         return render(request, "dashboard.html", contexto)
@@ -1779,23 +2723,21 @@ def dashboard(request):
     # --------------------------------------------------
     if perfil_chave == _n(PERFIL_MEDICO):
 
-        crm = request.session.get("crm")
-
+        # mesma regra da listagem: só o que a recepção já aceitou, sem cancelados
         consultas = (
-            Agendamento.objects
-            .filter(medico_id=crm)
+            consultas_visiveis(request)
+            .exclude(filtro_status(NOMES_CANCELADA))
             .select_related("paciente", "status")
-            .order_by("data_hora")
         )
-
-        hoje = timezone.localdate()
+        hoje = hoje_local()
 
         contexto.update({
             "consultas": consultas,
-            "consultas_hoje": consultas.filter(
-                data_hora__date=hoje
-            ).count(),
+            "consultas_hoje": consultas.filter(data_hora__date=hoje).count(),
             "total_consultas": consultas.count(),
+            "proximas_consultas": list(
+                consultas.filter(data_hora__gte=agora).order_by("data_hora")[:8]
+            ),
         })
 
     # --------------------------------------------------
@@ -1811,7 +2753,71 @@ def dashboard(request):
                 Agendamento.objects
                 .filter(filtro_status(NOMES_SOLICITADA))
                 .count()
+                if "aceitar" in acoes_do_perfil(perfil, "consultas") else None
             ),
         })
 
     return render(request, "dashboard.html", contexto)
+
+
+@login_requerido
+@require_POST
+@transaction.atomic
+def registrar_pagamento_dinheiro(request, agendamento_id):
+    # Somente a recepcionista pode registrar dinheiro em espécie.
+    perfil = request.session.get("perfil")
+
+    if chave_perfil(perfil) != _n(PERFIL_RECEPCIONISTA):
+        messages.error(
+            request,
+            "Somente a recepcionista pode registrar dinheiro em espécie."
+        )
+        return redirect("dashboard")
+
+    exigir(request, "pagamentos", "criar")
+
+    agendamento = get_object_or_404(
+        Agendamento.objects.select_related("status"),
+        pk=agendamento_id
+    )
+
+    if _n(agendamento.tipo) != _n("Consulta"):
+        messages.error(
+            request,
+            "O pagamento em dinheiro está disponível somente para consultas."
+        )
+        return redirect("lista", recurso="consultas")
+
+    if (
+        eh_status(agendamento, NOMES_SOLICITADA)
+        or eh_status(agendamento, NOMES_CANCELADA)
+    ):
+        messages.error(
+            request,
+            "Não é possível registrar pagamento para esta consulta."
+        )
+        return redirect("lista", recurso="consultas")
+
+    if pagamento_ativo_existe(agendamento):
+        messages.warning(
+            request,
+            "Esta consulta já possui um pagamento registrado."
+        )
+        return redirect("lista", recurso="consultas")
+
+    pagamento = Pagamento.objects.create(
+        agendamento=agendamento,
+        descricao="Pagamento de consulta em dinheiro",
+        valor=VALOR_CONSULTA,
+        forma_pagamento="Dinheiro",
+        status_pagamento=obter_status_pagamento("Concluído"),
+        data_pagamento=hoje_local()
+    )
+    registrar_auditoria(request, "pagamento_dinheiro", f"id={pagamento.pk}")
+
+    messages.success(
+        request,
+        "Pagamento de R$ 60,00 em dinheiro registrado com sucesso."
+    )
+
+    return redirect("lista", recurso="consultas")

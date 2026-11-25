@@ -49,7 +49,8 @@
 
                 <form method="POST" action="{% url 'login' %}">
                     {% csrf_token %}
-                    
+                    {% if proximo %}<input type="hidden" name="next" value="{{ proximo }}">{% endif %}
+
 <div class="field">
     <label for="identificador">E-mail ou nome de usuário</label>
     <input type="text" id="identificador" name="identificador"

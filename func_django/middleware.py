@@ -1,5 +1,6 @@
 import time
 
+from django.conf import settings
 from django.db import connection
 
 
@@ -7,6 +8,7 @@ class TempoMiddleware:
     """Mostra no terminal quanto cada página levou e quantas consultas fez ao banco.
 
     Exemplo:  [TEMPO] GET /consultas/ -> 840 ms | 9 consultas ao banco = 610 ms
+    Só imprime com DEBUG ligado (em produção ele não mede nada e não polui o log).
     Use só para investigar lentidão; depois pode remover do MIDDLEWARE.
     """
 
@@ -14,6 +16,9 @@ class TempoMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if not settings.DEBUG:
+            return self.get_response(request)
+
         duracoes = []
 
         def medir(execute, sql, params, many, context):

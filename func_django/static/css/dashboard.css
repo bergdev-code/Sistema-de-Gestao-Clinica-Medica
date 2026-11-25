@@ -358,3 +358,189 @@ body {
     }
 }
 
+/* CABEÇALHO */
+.dashboard-card .alergias-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.dashboard-card .alergias-header h2 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+
+/* BOTÃO ADICIONAR */
+.dashboard-card .alergias-header .btn-adicionar-alergia {
+    background: #334155;
+    color: #e2e8f0;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    padding: 8px 13px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .2s ease;
+}
+
+.dashboard-card .alergias-header .btn-adicionar-alergia:hover {
+    background: #475569;
+    border-color: #64748b;
+}
+
+/* FORMULÁRIO */
+.dashboard-card .alergia-cadastro {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin: 12px 0 18px;
+}
+
+/* CAMPO DE TEXTO */
+.dashboard-card .alergia-cadastro input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    height: 42px;
+    padding: 0 14px;
+    margin: 0;
+    box-sizing: border-box;
+
+    background: #172234;
+    color: #e2e8f0;
+
+    border: 1px solid #344256;
+    border-radius: 8px;
+
+    font-size: 13px;
+    font-family: inherit;
+
+    outline: none;
+    box-shadow: none;
+    transition: border-color .2s, background .2s;
+}
+
+.dashboard-card .alergia-cadastro input[type="text"]::placeholder {
+    color: #8492a6;
+}
+
+.dashboard-card .alergia-cadastro input[type="text"]:focus {
+    border-color: #64748b;
+    background: #1e293b;
+    box-shadow: 0 0 0 2px rgba(148, 163, 184, .10);
+}
+
+/* BOTÃO SALVAR */
+.dashboard-card .alergia-cadastro button {
+    height: 42px;
+    padding: 0 17px;
+    border-radius: 8px;
+    border: 1px solid #475569;
+
+    background: #334155;
+    color: #f1f5f9;
+
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .2s ease;
+}
+
+.dashboard-card .alergia-cadastro button:hover {
+    background: #475569;
+}
+
+/* MENSAGEM VAZIA */
+.dashboard-card .paciente-vazio {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+/* CELULAR */
+@media (max-width: 480px) {
+    .dashboard-card .alergia-cadastro {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .dashboard-card .alergia-cadastro button {
+        width: 100%;
+    }
+}
+
+.alergias-card .alergias-titulo h2 {
+    margin-bottom: 5px;
+}
+
+.alergias-card .alergias-titulo p {
+    color: #aab7ca;
+    font-size: 13px;
+    margin-bottom: 20px;
+}
+
+.alergias-card .alergias-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.alergias-card .alergia-linha {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 54px;
+    padding: 10px 14px;
+    box-sizing: border-box;
+
+    background: #263449 !important;
+    border: 1px solid #35465d !important;
+    border-radius: 10px !important;
+    color: #e2e8f0;
+}
+
+.alergias-card .alergia-indicador {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+
+    background: #344761;
+    color: #cbd5e1;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.alergias-card .alergia-linha strong {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.alergias-card .btn-remover-alergia {
+    padding: 7px 11px;
+    border: 1px solid #52647b;
+    border-radius: 7px;
+    background: transparent;
+    color: #cbd5e1;
+    font-size: 12px;
+    cursor: pointer;
+    transition: .2s;
+}
+
+.alergias-card .btn-remover-alergia:hover {
+    background: #3b485b;
+    color: #fff;
+}
+
+.alergias-card .alergias-vazio {
+    color: #aab7ca;
+    font-size: 13px;
+}

@@ -11,16 +11,23 @@
         <p>Informações pessoais e histórico clínico</p>
     </div>
 
-    <a href="{% url 'lista' 'pacientes' %}" class="btn btn-secondary">
-        Voltar
-    </a>
+    <div class="acoes-linha">
+        {% if pode_editar %}
+            <a href="{% url 'editar' 'pacientes' paciente.cpf %}" class="btn btn-primary">
+                Editar dados
+            </a>
+        {% endif %}
+        <a href="{% url 'lista' 'pacientes' %}" class="btn btn-secondary">
+            Voltar
+        </a>
+    </div>
 </div>
 
 <!-- DADOS PESSOAIS -->
 <section class="paciente-card paciente-identificacao">
 
     <div class="paciente-avatar">
-        <span>{{ paciente.nome|first|upper }}</span>
+        <span>{{ paciente.nome|default:"?"|first|upper }}</span>
     </div>
 
     <div class="paciente-identificacao-info">
@@ -63,11 +70,13 @@
         <small>Exames agendados</small>
     </div>
 
+    {% if pode_ver_prontuarios %}
     <div class="paciente-indicador">
         <span>Prontuários</span>
         <strong>{{ total_prontuarios }}</strong>
         <small>Registros médicos</small>
     </div>
+    {% endif %}
 
     <div class="paciente-indicador">
         <span>Alergias</span>
@@ -98,7 +107,7 @@
                         <strong>{{ alergia.descricao }}</strong>
                     </div>
 
-                    {% if pode_criar_alergia %}
+                    {% if pode_gerir_alergia %}
                         <form
                             method="POST"
                             action="{% url 'excluir_alergia' paciente.cpf alergia.id_alergias %}"
@@ -121,7 +130,7 @@
         </p>
     {% endif %}
 
-    {% if pode_criar_alergia %}
+    {% if pode_gerir_alergia %}
         <form
             method="POST"
             action="{% url 'adicionar_alergia' paciente.cpf %}"
@@ -178,7 +187,11 @@
                             <td>{{ agendamento.tipo }}</td>
 
                             <td>
-                                {{ agendamento.data_hora|date:"d/m/Y H:i" }}
+                                {% if agendamento.horario_a_definir %}
+                                    {{ agendamento.data_hora|date:"d/m/Y" }} (horário a definir)
+                                {% else %}
+                                    {{ agendamento.data_hora|date:"d/m/Y H:i" }}
+                                {% endif %}
                             </td>
 
                             <td>{{ agendamento.medico.nome }}</td>
@@ -201,6 +214,7 @@
 
 </section>
 
+{% if pode_ver_prontuarios %}
 <!-- PRONTUÁRIOS -->
 <section class="paciente-card">
 
@@ -252,6 +266,7 @@
     {% endif %}
 
 </section>
+{% endif %}
 
 <!-- FINANCEIRO -->
 {% if pode_ver_financeiro %}

@@ -883,3 +883,6 @@ html[data-theme="dark"] .alergia-form {
         grid-template-columns: 1fr !important;
     }
 }
+/* Paginação das listagens */
+.paginacao { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px; font-size: 13px; color: #64748b; }
+html[data-theme="dark"] .paginacao { color: #9aabc0; }

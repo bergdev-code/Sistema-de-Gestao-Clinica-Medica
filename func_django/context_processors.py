@@ -1,5 +1,5 @@
-from .views import RECURSOS, acoes_do_perfil
-from .models import Usuario, GoogleIdentity
+from .models import GoogleIdentity, Usuario
+from .views import PERFIL_PACIENTE, RECURSOS, _n, acoes_do_perfil, chave_perfil
 
 
 def menu(request):
@@ -11,11 +11,17 @@ def menu(request):
         if "ver" in acoes_do_perfil(perfil, r)
     }
 
+    # O aviso "complete seu cadastro" só existe para o paciente que entrou pelo
+    # Google e ainda não tem CPF/dados. Quando a sessão já tem o CPF (o caso comum)
+    # não há nenhuma consulta ao banco aqui, em nenhuma página.
     mostrar_completar_cadastro = False
-
     username = sessao.get("username") if sessao else None
 
-    if username:
+    if (
+        username
+        and not sessao.get("cpf")
+        and chave_perfil(perfil) == _n(PERFIL_PACIENTE)
+    ):
         usuario = (
             Usuario.objects
             .filter(username=username)

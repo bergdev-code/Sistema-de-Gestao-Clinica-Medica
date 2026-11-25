@@ -1,157 +1,38 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+/* Página "Criar conta": complementa o login.css (mesmas variáveis e tema claro/escuro).
+   Antes este arquivo era uma cópia do CSS do painel (resetava body/topbar e
+   sobrescrevia o login.css) e não definia nenhuma das classes usadas na página. */
+
+.register-shell { min-height: 760px; }
+.register-visual { min-height: 760px; }
+.register-panel { padding-top: 70px; padding-bottom: 70px; }
+.register-wrap { max-width: 600px; }
+
+.register-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 16px;
 }
 
-body {
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    background: #f3f5f9;
-    color: #1e293b;
-    min-height: 100vh;
-}
-
-/* CABEÇALHO */
-
-.topbar {
-    background: #102b50;
-    color: white;
-    padding: 20px 5%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 20px;
-}
-
-.brand h2 {
-    font-size: 19px;
-    font-weight: 700;
-}
-
-.user-info {
+.profile-note {
     display: flex;
     align-items: center;
-    gap: 22px;
-}
-
-.user-details {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    text-align: right;
-}
-
-.user-details strong {
-    font-size: 13px;
-}
-
-.user-details span {
-    font-size: 11px;
-    color: #bfdbfe;
-}
-
-/* BOTÃO SAIR */
-
-.logout-button {
-    background: #dc2626;
-    color: white;
-    border: none;
-    border-radius: 7px;
-    padding: 10px 18px;
+    gap: 8px;
+    margin: 0 0 18px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--focus);
+    color: var(--primary);
     font-size: 12px;
     font-weight: 600;
-    cursor: pointer;
-    transition: 0.2s;
 }
 
-.logout-button:hover {
-    background: #b91c1c;
+.profile-note span { font-weight: 800; }
+
+/* no desktop o painel do formulário ganha mais espaço que a imagem */
+@media (min-width: 851px) {
+    .register-shell { grid-template-columns: .8fr 1.2fr; }
 }
 
-/* CONTEÚDO */
-
-.dashboard-container {
-    max-width: 1100px;
-    margin: 55px auto;
-    padding: 0 25px;
-}
-
-.welcome-section {
-    margin-bottom: 35px;
-}
-
-.welcome-section h1 {
-    font-size: 28px;
-    color: #142b49;
-    margin-bottom: 10px;
-}
-
-.welcome-section p {
-    font-size: 14px;
-    color: #64748b;
-}
-
-/* CARD */
-
-.dashboard-card {
-    background: white;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 5px 20px rgba(15, 23, 42, 0.05);
-    max-width: 600px;
-}
-
-.dashboard-card h2 {
-    font-size: 18px;
-    color: #142b49;
-    margin-bottom: 25px;
-}
-
-.info-item {
-    display: flex;
-    justify-content: space-between;
-    gap: 15px;
-    padding: 15px 0;
-    border-bottom: 1px solid #e2e8f0;
-    font-size: 13px;
-}
-
-.info-item:last-child {
-    border-bottom: none;
-}
-
-.info-item span {
-    color: #64748b;
-}
-
-.info-item strong {
-    color: #1e293b;
-    text-align: right;
-}
-
-/* RESPONSIVIDADE */
-
-@media (max-width: 600px) {
-
-    .topbar {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .user-info {
-        width: 100%;
-        justify-content: space-between;
-    }
-
-    .user-details {
-        text-align: left;
-    }
-
-    .welcome-section h1 {
-        font-size: 23px;
-    }
-
-    .dashboard-card {
-        padding: 20px;
-    }
+@media (max-width: 640px) {
+    .register-grid { grid-template-columns: 1fr; }
 }

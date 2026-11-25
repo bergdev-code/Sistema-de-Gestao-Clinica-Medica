@@ -14,15 +14,6 @@
         <p>Gerencie suas informações e configurações de acesso.</p>
     </section>
 
-    <!-- MENSAGENS -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="account-message {{ message.tags }}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-
     {% if usuario %}
 
         <div class="account-grid">

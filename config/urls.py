@@ -27,20 +27,33 @@ urlpatterns = [
     path("conta/", views.conta, name="conta"),
 
     # CONSULTAS
-    path("consultas/solicitar/", views.solicitar_consulta, name="solicitar_consulta"),
-    path("consultas/<int:pk>/aceitar/", views.aceitar_consulta, name="aceitar_consulta"),
-    path(
-        "consultas/<int:pk>/recusar/",
-        views.responder_consulta,
-        {"acao": "recusar"},
-        name="recusar_consulta"
-    ),
+path("consultas/solicitar/", views.solicitar_consulta, name="solicitar_consulta"),
+
+path("consultas/<int:pk>/aceitar/", views.aceitar_consulta, name="aceitar_consulta"),
+
+path(
+    "consultas/<int:pk>/recusar/",
+    views.responder_consulta,
+    {"acao": "recusar"},
+    name="recusar_consulta"
+),
+
+path(
+    "consultas/<int:pk>/cancelar/",
+    views.cancelar_consulta,
+    name="cancelar_consulta"
+),
 
     # FINANCEIRO
     path("financeiro/", views.financeiro, name="financeiro"),
     path("financeiro/pagar/", views.pagar, name="pagar"),
     path("financeiro/<int:pk>/confirmar/", views.confirmar_pagamento, name="confirmar_pagamento"),
     path("financeiro/novo/", views.novo_pagamento, name="novo_pagamento"),
+    path(
+    "financeiro/pagamento/",
+    views.pagar_consulta,
+    name="pagar_consulta"
+),
 
     # DETALHES E ALERGIAS DOS PACIENTES
     path("pacientes/<str:cpf>/", views.detalhe_paciente, name="detalhe_paciente"),
@@ -56,7 +69,23 @@ urlpatterns = [
     ),
 
     # ROTAS GENÉRICAS SEMPRE NO FINAL
-    path("<slug:recurso>/", views.lista, name="lista"),
-    path("<slug:recurso>/novo/", views.novo, name="novo"),
-    path("<slug:recurso>/<str:pk>/excluir/", views.excluir, name="excluir"),
+path("<slug:recurso>/", views.lista, name="lista"),
+path("<slug:recurso>/novo/", views.novo, name="novo"),
+
+path(
+    "<slug:recurso>/<str:pk>/editar/",
+    views.editar,
+    name="editar"
+),
+
+path(
+    "<slug:recurso>/<str:pk>/excluir/",
+    views.excluir,
+    name="excluir"
+),
+path(
+    "financeiro/<int:pk>/cancelar/",
+    views.cancelar_pagamento,
+    name="cancelar_pagamento"
+),
 ]

@@ -1,0 +1,130 @@
+
+{% extends 'base.html' %}
+
+{% block title %}Pagamento de consultas{% endblock %}
+
+{% block content %}
+
+<section class="dashboard-card">
+
+    <h2>Pagamento de consultas</h2>
+
+    <p>
+        Realize o pagamento das suas consultas médicas.
+    </p>
+
+    <div class="pagamento-valor">
+        <span>Valor por consulta</span>
+        <h1>R$ {{ valor_consulta|floatformat:2 }}</h1>
+    </div>
+
+    <h3>Minhas consultas</h3>
+
+    {% for agendamento in agendamentos %}
+
+        <div class="pagamento-card">
+
+            <h4>Consulta #{{ agendamento.id_agendamento }}</h4>
+
+            <p>
+                <strong>Médico:</strong>
+                {{ agendamento.medico.nome }}
+            </p>
+
+            <p>
+                <strong>Data:</strong>
+                {{ agendamento.data_hora|date:"d/m/Y H:i" }}
+            </p>
+
+            <p>
+                <strong>Valor:</strong> R$ {{ valor_consulta|floatformat:2 }}
+            </p>
+
+            {% if agendamento.ja_pago %}
+                <p><em>Já existe um pagamento registrado para esta consulta.</em></p>
+            {% else %}
+            <form method="POST">
+                {% csrf_token %}
+
+                <input
+                    type="hidden"
+                    name="agendamento_id"
+                    value="{{ agendamento.id_agendamento }}"
+                >
+
+                <label for="forma_{{ agendamento.id_agendamento }}">
+                    Forma de pagamento
+                </label>
+
+                <select
+                    name="forma_pagamento"
+                    id="forma_{{ agendamento.id_agendamento }}"
+                    required
+                >
+                    <option value="">Selecione uma opção</option>
+
+                    {% for forma in formas_pagamento %}
+                        <option value="{{ forma }}">{{ forma }}</option>
+                    {% endfor %}
+
+                </select>
+
+                <button type="submit">
+                    Continuar pagamento
+                </button>
+
+            </form>
+            {% endif %}
+
+        </div>
+
+    {% empty %}
+
+        <p>Você ainda não possui consultas agendadas.</p>
+
+    {% endfor %}
+
+    <hr>
+
+    <h3>Histórico de pagamentos</h3>
+
+    {% for pagamento in pagamentos %}
+
+        <div class="pagamento-card">
+
+            <p>
+                <strong>Consulta:</strong>
+                #{{ pagamento.agendamento.id_agendamento }}
+            </p>
+
+            <p>
+                <strong>Valor:</strong>
+                R$ {{ pagamento.valor }}
+            </p>
+
+            <p>
+                <strong>Método:</strong>
+                {{ pagamento.forma_pagamento }}
+            </p>
+
+            <p>
+                <strong>Status:</strong>
+                {{ pagamento.status_pagamento.descricao }}
+            </p>
+
+            <p>
+                <strong>Data:</strong>
+                {{ pagamento.data_pagamento|date:"d/m/Y" }}
+            </p>
+
+        </div>
+
+    {% empty %}
+
+        <p>Nenhum pagamento registrado.</p>
+
+    {% endfor %}
+
+</section>
+
+{% endblock %}
