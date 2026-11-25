@@ -1,6 +1,6 @@
+
 from django.db import models
-from django.shortcuts import get_object_or_404, redirect
-from django.contrib import messages
+
 
 class Medico(models.Model):
 
@@ -13,9 +13,10 @@ class Medico(models.Model):
         db_table = 'medicos'
         managed = False
 
-
     def __str__(self):
         return f"{self.nome} (CRM {self.crm})"
+
+
 class func_django(models.Model):
 
     cpf = models.CharField(max_length=11, primary_key=True)
@@ -24,20 +25,21 @@ class func_django(models.Model):
     data_nascimento = models.DateField(null=True, blank=True)
 
     medico = models.ForeignKey(
-    Medico,
-    on_delete=models.PROTECT,
-    related_name="pacientes",
-    null=True,
-    blank=True
-)
+        Medico,
+        on_delete=models.PROTECT,
+        related_name="pacientes",
+        null=True,
+        blank=True
+    )
 
     class Meta:
         db_table = 'pacientes'
         managed = True
-        
 
     def __str__(self):
         return f"{self.nome or 'Sem nome'} ({self.cpf})"
+
+
 class Alergia(models.Model):
 
     id_alergias = models.AutoField(primary_key=True)
@@ -57,7 +59,8 @@ class Alergia(models.Model):
 
     def __str__(self):
         return self.descricao
-    
+
+
 class Perfil(models.Model):
 
     id_perfil = models.AutoField(primary_key=True)
@@ -67,10 +70,10 @@ class Perfil(models.Model):
         db_table = 'perfil'
         managed = True
 
-
-
     def __str__(self):
         return self.nome_perfil
+
+
 class Usuario(models.Model):
 
     id_usuario = models.AutoField(primary_key=True)
@@ -95,12 +98,12 @@ class Usuario(models.Model):
     )
 
     medico = models.ForeignKey(
-    Medico,
-    on_delete=models.PROTECT,
-    db_column='crm',
-    null=True,
-    blank=True
-)
+        Medico,
+        on_delete=models.PROTECT,
+        db_column='crm',
+        null=True,
+        blank=True
+    )
 
     paciente = models.ForeignKey(
         func_django,
@@ -109,15 +112,17 @@ class Usuario(models.Model):
         null=True,
         blank=True
     )
-    
+
     class Meta:
         db_table = 'usuarios'
         managed = True
-        
 
     def __str__(self):
         return self.username
+
+
 class GoogleIdentity(models.Model):
+
     id_google = models.AutoField(primary_key=True)
 
     usuario = models.OneToOneField(
@@ -143,7 +148,9 @@ class GoogleIdentity(models.Model):
     def __str__(self):
         return self.usuario.email
 
+
 class Prontuario(models.Model):
+
     id_prontuario = models.AutoField(primary_key=True)
 
     anamnese = models.TextField(null=True, blank=True)
@@ -168,6 +175,7 @@ class Prontuario(models.Model):
         db_table = 'prontuarios'
         managed = False
 
+
 class Especialidade(models.Model):
 
     id_especialidade = models.AutoField(primary_key=True)
@@ -177,10 +185,10 @@ class Especialidade(models.Model):
         db_table = 'especialidades'
         managed = False
 
-
-
     def __str__(self):
         return self.nome
+
+
 class MedicoEspecialidade(models.Model):
 
     id_medico_especialidade = models.AutoField(primary_key=True)
@@ -222,6 +230,7 @@ class HorarioMedico(models.Model):
 
 
 class StatusAgendamento(models.Model):
+
     id_status = models.AutoField(primary_key=True)
     descricao = models.CharField(max_length=30)
 
@@ -229,11 +238,12 @@ class StatusAgendamento(models.Model):
         db_table = 'status_agendamento'
         managed = False
 
-
-
     def __str__(self):
         return self.descricao
+
+
 class Agendamento(models.Model):
+
     id_agendamento = models.AutoField(primary_key=True)
 
     paciente = models.ForeignKey(
@@ -262,18 +272,21 @@ class Agendamento(models.Model):
         db_table = 'agendamentos'
         managed = False
 
+
 class StatusPagamento(models.Model):
+
     id_status = models.AutoField(primary_key=True)
     descricao = models.CharField(max_length=50)
 
     class Meta:
         db_table = "status_pagamento"
 
-
-
     def __str__(self):
         return self.descricao
+
+
 class Pagamento(models.Model):
+
     id_pagamento = models.AutoField(primary_key=True)
 
     agendamento = models.ForeignKey(
@@ -297,32 +310,74 @@ class Pagamento(models.Model):
     class Meta:
         db_table = "pagamentos"
 
-def adicionar_alergia(request, cpf):
 
-    paciente = get_object_or_404(func_django, cpf=cpf)
+# =====================================================
+# SUPORTE
+# =====================================================
 
-    if request.method == "POST":
+class ChamadoSuporte(models.Model):
 
-        descricao = request.POST.get("descricao", "").strip()
+    STATUS_CHOICES = [
+        ("Aberto", "Aberto"),
+        ("Em andamento", "Em andamento"),
+        ("Resolvido", "Resolvido"),
+    ]
 
-        if not descricao:
-            messages.error(request, "Informe uma alergia.")
-            return redirect("detalhe_paciente", cpf=cpf)
+    id_chamado = models.AutoField(primary_key=True)
 
-        # Evita alergias duplicadas
-        if Alergia.objects.filter(
-            paciente=paciente,
-            descricao__iexact=descricao
-        ).exists():
+    usuario = models.ForeignKey(
+        Usuario,
+        on_delete=models.PROTECT,
+        db_column="id_usuario",
+        related_name="chamados_suporte"
+    )
 
-            messages.warning(request, "Essa alergia já está cadastrada.")
-            return redirect("detalhe_paciente", cpf=cpf)
+    assunto = models.CharField(max_length=150)
+    descricao = models.TextField()
 
-        Alergia.objects.create(
-            paciente=paciente,
-            descricao=descricao
-        )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="Aberto"
+    )
 
-        messages.success(request, "Alergia cadastrada com sucesso!")
+    data_abertura = models.DateTimeField(auto_now_add=True)
+    data_atualizacao = models.DateTimeField(auto_now=True)
 
-    return redirect("detalhe_paciente", cpf=cpf)
+    class Meta:
+        db_table = "chamados_suporte"
+        ordering = ["-data_abertura"]
+
+    def __str__(self):
+        return f"Chamado #{self.id_chamado} - {self.assunto}"
+
+
+class RespostaSuporte(models.Model):
+
+    id_resposta = models.AutoField(primary_key=True)
+
+    chamado = models.ForeignKey(
+        ChamadoSuporte,
+        on_delete=models.CASCADE,
+        db_column="id_chamado",
+        related_name="respostas"
+    )
+
+    usuario = models.ForeignKey(
+    Usuario,
+    on_delete=models.PROTECT,
+    db_column="id_usuario",
+    related_name="respostas_suporte",
+    null=True,
+    blank=True
+)
+
+    mensagem = models.TextField()
+    data_resposta = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "respostas_suporte"
+        ordering = ["data_resposta"]
+
+    def __str__(self):
+        return f"Resposta #{self.id_resposta} - Chamado #{self.chamado_id}"

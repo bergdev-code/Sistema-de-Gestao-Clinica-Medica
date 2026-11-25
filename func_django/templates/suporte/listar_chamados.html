@@ -1,0 +1,109 @@
+
+{% extends 'base.html' %}
+
+{% block title %}Central de chamados{% endblock %}
+
+{% block content %}
+
+<section class="welcome-section">
+    <h1>Central de chamados</h1>
+    <p>Acompanhe e gerencie as solicitações enviadas pelos pacientes.</p>
+</section>
+
+<!-- INDICADORES -->
+<div class="dashboard-cards">
+
+    <section class="dashboard-card">
+        <h2>Total de chamados</h2>
+        <p>{{ total_chamados }}</p>
+    </section>
+
+    <section class="dashboard-card">
+        <h2>Em aberto</h2>
+        <p>{{ total_abertos }}</p>
+    </section>
+
+    <section class="dashboard-card">
+        <h2>Em andamento</h2>
+        <p>{{ total_andamento }}</p>
+    </section>
+
+    <section class="dashboard-card">
+        <h2>Resolvidos</h2>
+        <p>{{ total_resolvidos }}</p>
+    </section>
+
+</div>
+
+<!-- LISTAGEM -->
+<section class="dashboard-card">
+
+    <h2>Chamados recebidos</h2>
+
+    {% if chamados %}
+
+        <div style="overflow-x: auto;">
+
+            <table class="data-table">
+
+                <thead>
+                    <tr>
+                        <th>Nº</th>
+                        <th>Paciente</th>
+                        <th>Assunto</th>
+                        <th>Mensagem</th>
+                        <th>Data de abertura</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for chamado in chamados %}
+
+                        <tr>
+                            <td>
+                                <a href="{% url 'detalhe_chamado' chamado.pk %}">
+                                    #{{ chamado.id_chamado }}
+                                </a>
+                            </td>
+
+                            <td>{{ chamado.usuario.username }}</td>
+
+                            <td>{{ chamado.assunto }}</td>
+
+                            <td class="chamado-descricao">
+                                {{ chamado.descricao }}
+                            </td>
+
+                            <td>
+                                {{ chamado.data_abertura|date:"d/m/Y H:i" }}
+                            </td>
+
+                            <td>{{ chamado.status }}</td>
+
+                            <td>
+    <a href="{% url 'detalhe_chamado' chamado.pk %}" class="btn-primary">
+        Responder
+    </a>
+</td>
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <p>Nenhum chamado foi cadastrado até o momento.</p>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}

@@ -1,0 +1,81 @@
+
+{% extends 'base.html' %}
+
+{% block title %}Meus chamados{% endblock %}
+
+{% block content %}
+
+<section class="welcome-section">
+    <h1>Meus chamados</h1>
+    <p>Acompanhe suas solicitações e as respostas da equipe da clínica.</p>
+</section>
+
+<section class="dashboard-card">
+
+    <div class="suporte-lista-cabecalho">
+        <h2>Minhas solicitações</h2>
+
+        <a href="{% url 'abrir_chamado' %}" class="btn btn-primary">
+            Abrir chamado
+        </a>
+    </div>
+
+    {% if chamados %}
+
+        <div style="overflow-x: auto;">
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Nº</th>
+                        <th>Assunto</th>
+                        <th>Mensagem</th>
+                        <th>Data de abertura</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for chamado in chamados %}
+                        <tr>
+                            <td>#{{ chamado.id_chamado }}</td>
+
+                            <td>{{ chamado.assunto }}</td>
+
+                            <td class="chamado-descricao">
+                                {{ chamado.descricao }}
+                            </td>
+
+                            <td>
+                                {{ chamado.data_abertura|date:"d/m/Y H:i" }}
+                            </td>
+
+                            <td>{{ chamado.status }}</td>
+
+                            <td>
+                                <a
+                                    href="{% url 'detalhe_chamado' chamado.pk %}"
+                                    class="btn btn-primary btn-sm"
+                                >
+                                    Ver conversa
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <p class="empty">
+            Você ainda não possui chamados cadastrados.
+        </p>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}

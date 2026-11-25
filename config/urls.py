@@ -88,4 +88,36 @@ path(
     views.cancelar_pagamento,
     name="cancelar_pagamento"
 ),
+
+# SUPORTE
+path(
+    "suporte/abrir/",
+    views.abrir_chamado,
+    name="abrir_chamado"
+),
+path(
+    "suporte/chamados/",
+    views.listar_chamados,
+    name="listar_chamados"
+),
+path(
+    "suporte/chamados/<int:pk>/",
+    views.detalhe_chamado,
+    name="detalhe_chamado"
+),
+path(
+    "suporte/chamados/<int:pk>/responder/",
+    views.responder_chamado,
+    name="responder_chamado"
+),
+path(
+    "suporte/chamados/<int:pk>/status/",
+    views.atualizar_status_chamado,
+    name="atualizar_status_chamado"
+),
+path(
+    "suporte/meus-chamados/",
+    views.chamados_suporte,
+    name="chamados_suporte"
+),
 ]

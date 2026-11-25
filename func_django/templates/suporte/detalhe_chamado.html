@@ -1,0 +1,166 @@
+
+{% extends 'base.html' %}
+
+{% block title %}Chamado #{{ chamado.id_chamado }}{% endblock %}
+
+{% block content %}
+
+<section class="welcome-section">
+    <h1>Chamado #{{ chamado.id_chamado }}</h1>
+    <p>Acompanhe as mensagens e o andamento da solicitação.</p>
+</section>
+
+<section class="dashboard-card suporte-detalhe">
+
+    <!-- INFORMAÇÕES DO CHAMADO -->
+    <div class="suporte-cabecalho">
+
+        <div>
+            <h2>{{ chamado.assunto }}</h2>
+            <p>
+                Aberto por:
+                <strong>{{ chamado.usuario.username }}</strong>
+            </p>
+            <p>
+                Data:
+                {{ chamado.data_abertura|date:"d/m/Y H:i" }}
+            </p>
+        </div>
+
+        <span class="suporte-status">
+            {{ chamado.status }}
+        </span>
+
+    </div>
+
+    <!-- MENSAGEM ORIGINAL -->
+    <div class="suporte-mensagem-original">
+
+        <h3>Mensagem de abertura</h3>
+
+        <p>{{ chamado.descricao|linebreaksbr }}</p>
+
+    </div>
+
+    <!-- HISTÓRICO DA CONVERSA -->
+    <div class="suporte-conversa">
+
+        <h3>Histórico de mensagens</h3>
+
+        {% if respostas %}
+
+            {% for resposta in respostas %}
+
+                <div class="suporte-mensagem">
+
+                    <div class="suporte-mensagem-info">
+
+                        <strong>
+                            {% if resposta.usuario_id == chamado.usuario_id %}
+                                Paciente
+                            {% else %}
+                                Equipe de suporte
+                            {% endif %}
+                        </strong>
+
+                        <span>
+                            {{ resposta.data_resposta|date:"d/m/Y H:i" }}
+                        </span>
+
+                    </div>
+
+                    <p>{{ resposta.mensagem|linebreaksbr }}</p>
+
+                </div>
+
+            {% endfor %}
+
+        {% else %}
+
+            <p class="suporte-vazio">
+                Ainda não existem respostas neste chamado.
+            </p>
+
+        {% endif %}
+
+    </div>
+
+    <!-- FORMULÁRIO DE RESPOSTA -->
+    <div class="suporte-responder">
+
+        <h3>Enviar mensagem</h3>
+
+        <form
+            method="POST"
+            action="{% url 'responder_chamado' chamado.pk %}"
+        >
+            {% csrf_token %}
+
+            <textarea
+                name="mensagem"
+                rows="5"
+                maxlength="5000"
+                placeholder="Digite sua mensagem..."
+                required
+            ></textarea>
+
+            <button type="submit" class="btn btn-primary">
+                Enviar resposta
+            </button>
+
+        </form>
+
+    </div>
+
+    <!-- ALTERAÇÃO DE STATUS: SOMENTE EQUIPE -->
+    {% if equipe_suporte %}
+
+        <div class="suporte-alterar-status">
+
+            <h3>Gerenciar chamado</h3>
+
+            <form
+                method="POST"
+                action="{% url 'atualizar_status_chamado' chamado.pk %}"
+            >
+                {% csrf_token %}
+
+                <select name="status" required>
+
+                    <option value="Aberto"
+                        {% if chamado.status == "Aberto" %}selected{% endif %}>
+                        Aberto
+                    </option>
+
+                    <option value="Em andamento"
+                        {% if chamado.status == "Em andamento" %}selected{% endif %}>
+                        Em andamento
+                    </option>
+
+                    <option value="Resolvido"
+                        {% if chamado.status == "Resolvido" %}selected{% endif %}>
+                        Resolvido
+                    </option>
+
+                </select>
+
+                <button type="submit" class="btn btn-primary">
+                    Atualizar status
+                </button>
+
+            </form>
+
+        </div>
+
+    {% endif %}
+
+    <!-- VOLTAR -->
+    <div class="suporte-voltar">
+        <a href="{% url 'chamados_suporte' %}">
+            Voltar para meus chamados
+        </a>
+    </div>
+
+</section>
+
+{% endblock %}

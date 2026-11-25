@@ -52,6 +52,8 @@ from func_django.models import (
     StatusPagamento,
     Usuario,
     func_django,
+    ChamadoSuporte,
+    RespostaSuporte,
 )
 
 
@@ -395,6 +397,47 @@ class ProntuarioForm(forms.ModelForm):
             if not Agendamento.objects.filter(pk=ag_id, paciente=paciente, medico=medico).exists():
                 self.add_error("agendamento_id", "Essa consulta não existe ou não é deste paciente com este médico.")
         return dados
+
+
+class ChamadoSuporteForm(forms.ModelForm):
+
+    class Meta:
+        model = ChamadoSuporte
+        fields = ["assunto", "descricao"]
+
+        labels = {
+            "assunto": "Assunto",
+            "descricao": "Descreva sua solicitação",
+        }
+
+        widgets = {
+            "assunto": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex.: Problema ao solicitar consulta",
+                "maxlength": 150,
+            }),
+            "descricao": forms.Textarea(attrs={
+                "class": "form-control",
+                "placeholder": "Explique detalhadamente o que aconteceu...",
+                "rows": 5,
+            }),
+        }
+
+    def clean_assunto(self):
+        assunto = self.cleaned_data["assunto"].strip()
+
+        if not assunto:
+            raise ValidationError("Informe o assunto do chamado.")
+
+        return assunto
+
+    def clean_descricao(self):
+        descricao = self.cleaned_data["descricao"].strip()
+
+        if not descricao:
+            raise ValidationError("Informe a descrição do chamado.")
+
+        return descricao
 
 
 # Cada recurso vira lista + cadastro + exclusão usando os mesmos 3 templates.
@@ -2645,6 +2688,7 @@ def dashboard(request):
         "total_pacientes": None,
         "total_medicos": None,
         "total_consultas": None,
+        "mostrar_suporte": True,
     }
     agora = timezone.now() if settings.USE_TZ else dt.datetime.now()
 
@@ -2759,6 +2803,193 @@ def dashboard(request):
 
     return render(request, "dashboard.html", contexto)
 
+# ==================================================
+# SUPORTE
+# ==================================================
+
+def usuario_logado(request):
+    return get_object_or_404(
+        Usuario,
+        username=request.session["username"]
+    )
+
+
+def equipe_suporte(request):
+    perfil = chave_perfil(request.session.get("perfil"))
+
+    return perfil in {
+        _n(PERFIL_ROOT),
+        _n("Administrador"),
+        _n(PERFIL_RECEPCIONISTA),
+    }
+
+
+@login_requerido
+def abrir_chamado(request):
+    if chave_perfil(request.session.get("perfil")) != _n(PERFIL_PACIENTE):
+        raise PermissionDenied
+
+    usuario = usuario_logado(request)
+
+    if not usuario.paciente_id:
+        messages.error(
+            request,
+            "Sua conta ainda não está vinculada a um paciente."
+        )
+        return redirect("dashboard")
+
+    if request.method == "POST":
+        form = ChamadoSuporteForm(request.POST)
+
+        if form.is_valid():
+            chamado = form.save(commit=False)
+            chamado.usuario = usuario
+            chamado.save()
+
+            messages.success(
+                request,
+                "Seu chamado foi enviado com sucesso."
+            )
+            return redirect("chamados_suporte")
+    else:
+        form = ChamadoSuporteForm()
+
+    return render(
+        request,
+        "suporte/abrir_chamado.html",
+        {
+            "form": form,
+            "voltar": reverse("chamados_suporte"),
+        }
+    )
+
+
+@login_requerido
+def chamados_suporte(request):
+    usuario = usuario_logado(request)
+
+    if equipe_suporte(request):
+        chamados = ChamadoSuporte.objects.select_related(
+            "usuario"
+        ).all()
+
+    elif chave_perfil(request.session.get("perfil")) == _n(PERFIL_PACIENTE):
+        chamados = ChamadoSuporte.objects.filter(
+            usuario=usuario
+        )
+
+    else:
+        raise PermissionDenied
+
+    return render(
+        request,
+        "suporte/lista_chamados.html",
+        {
+            "chamados": chamados,
+            "equipe_suporte": equipe_suporte(request),
+        }
+    )
+
+
+@login_requerido
+def detalhe_chamado(request, pk):
+
+    equipe = equipe_suporte(request)
+
+    if equipe:
+        chamado = get_object_or_404(
+            ChamadoSuporte.objects.select_related("usuario"),
+            pk=pk
+        )
+
+    elif chave_perfil(request.session.get("perfil")) == _n(PERFIL_PACIENTE):
+
+        usuario = usuario_logado(request)
+
+        chamado = get_object_or_404(
+            ChamadoSuporte.objects.select_related("usuario"),
+            pk=pk,
+            usuario=usuario
+        )
+
+    else:
+        raise PermissionDenied
+
+    return render(
+        request,
+        "suporte/detalhe_chamado.html",
+        {
+            "chamado": chamado,
+            "respostas": chamado.respostas.select_related("usuario"),
+            "equipe_suporte": equipe,
+        }
+    )
+
+@login_requerido
+@require_POST
+def responder_chamado(request, pk):
+    usuario = usuario_logado(request)
+
+    if equipe_suporte(request):
+        chamado = get_object_or_404(ChamadoSuporte, pk=pk)
+
+    elif chave_perfil(request.session.get("perfil")) == _n(PERFIL_PACIENTE):
+        chamado = get_object_or_404(
+            ChamadoSuporte,
+            pk=pk,
+            usuario=usuario
+        )
+
+    else:
+        raise PermissionDenied
+
+    mensagem = request.POST.get("mensagem", "").strip()
+
+    if not mensagem:
+        messages.error(request, "Digite uma mensagem antes de enviar.")
+        return redirect("detalhe_chamado", pk=pk)
+
+    RespostaSuporte.objects.create(
+        chamado=chamado,
+        usuario=usuario,
+        mensagem=mensagem
+    )
+
+    if chamado.status == "Aberto":
+        chamado.status = "Em andamento"
+
+    chamado.save()
+
+    messages.success(request, "Resposta enviada com sucesso.")
+
+    return redirect("detalhe_chamado", pk=pk)
+
+
+@login_requerido
+@require_POST
+def atualizar_status_chamado(request, pk):
+    if not equipe_suporte(request):
+        raise PermissionDenied
+
+    chamado = get_object_or_404(ChamadoSuporte, pk=pk)
+
+    novo_status = request.POST.get("status")
+
+    status_validos = [
+        escolha[0]
+        for escolha in ChamadoSuporte.STATUS_CHOICES
+    ]
+
+    if novo_status not in status_validos:
+        messages.error(request, "Status inválido.")
+        return redirect("detalhe_chamado", pk=pk)
+
+    chamado.status = novo_status
+    chamado.save()
+
+    messages.success(request, "Status atualizado com sucesso.")
+
+    return redirect("detalhe_chamado", pk=pk)
 
 @login_requerido
 @require_POST
@@ -2821,3 +3052,129 @@ def registrar_pagamento_dinheiro(request, agendamento_id):
     )
 
     return redirect("lista", recurso="consultas")
+
+class ChamadoSuporteForm(forms.ModelForm):
+
+    class Meta:
+        model = ChamadoSuporte
+        fields = ["assunto", "descricao"]
+
+        labels = {
+            "assunto": "Assunto",
+            "descricao": "Descreva sua solicitação",
+        }
+
+        widgets = {
+            "assunto": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex.: Problema ao solicitar consulta",
+                "maxlength": 150,
+            }),
+            "descricao": forms.Textarea(attrs={
+                "class": "form-control",
+                "placeholder": "Explique detalhadamente o que aconteceu...",
+                "rows": 5,
+            }),
+        }
+
+    def clean_assunto(self):
+        assunto = self.cleaned_data["assunto"].strip()
+
+        if not assunto:
+            raise ValidationError("Informe o assunto do chamado.")
+
+        return assunto
+
+    def clean_descricao(self):
+        descricao = self.cleaned_data["descricao"].strip()
+
+        if not descricao:
+            raise ValidationError("Informe a descrição do chamado.")
+
+        return descricao
+
+
+@login_requerido
+def abrir_chamado(request):
+
+    username = request.session.get("username", "")
+
+    usuario = Usuario.objects.filter(
+        username__iexact=username
+    ).first()
+
+    if not usuario:
+        messages.error(
+            request,
+            "Não foi possível localizar sua conta."
+        )
+        return redirect("dashboard")
+
+    if request.method == "POST":
+
+        form = ChamadoSuporteForm(request.POST)
+
+        if form.is_valid():
+            chamado = form.save(commit=False)
+            chamado.usuario = usuario
+            chamado.save()
+
+            messages.success(
+                request,
+                "Seu chamado foi aberto com sucesso!"
+            )
+
+            return redirect("dashboard")
+
+    else:
+        form = ChamadoSuporteForm()
+
+    return render(
+        request,
+        "suporte/abrir_chamado.html",
+        {
+            "form": form,
+            "ativo": "suporte",
+            "titulo": "Abrir chamado de suporte",
+        }
+    )
+
+@login_requerido
+def listar_chamados(request):
+
+    perfil = chave_perfil(request.session.get("perfil"))
+
+    perfis_autorizados = {
+        _n(PERFIL_ROOT),
+        _n("Administrador"),
+        _n(PERFIL_RECEPCIONISTA),
+    }
+
+    if perfil not in perfis_autorizados:
+        raise PermissionDenied
+
+    chamados = (
+        ChamadoSuporte.objects
+        .select_related("usuario")
+        .order_by("-data_abertura")
+    )
+
+    contexto = {
+        "chamados": chamados,
+        "total_chamados": chamados.count(),
+        "total_abertos": chamados.filter(status="Aberto").count(),
+        "total_andamento": chamados.filter(
+            status="Em andamento"
+        ).count(),
+        "total_resolvidos": chamados.filter(
+            status="Resolvido"
+        ).count(),
+        "ativo": "suporte",
+        "titulo": "Central de chamados",
+    }
+
+    return render(
+        request,
+        "suporte/listar_chamados.html",
+        contexto
+    )

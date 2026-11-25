@@ -1,0 +1,54 @@
+
+{% extends 'base.html' %}
+
+{% block title %}Abrir chamado de suporte{% endblock %}
+
+{% block content %}
+
+<section class="welcome-section">
+    <h1>Central de suporte</h1>
+    <p>Descreva sua solicitação para que nossa equipe possa ajudar.</p>
+</section>
+
+<section class="dashboard-card">
+
+    <h2>Novo chamado</h2>
+
+    <form method="POST" class="form-card" novalidate>
+        {% csrf_token %}
+
+        {% for campo in form %}
+            <div class="form-field">
+
+                <label for="{{ campo.id_for_label }}">
+                    {{ campo.label }}
+                </label>
+
+                {{ campo }}
+
+                {% if campo.errors %}
+                    <div class="field-error">
+                        {{ campo.errors }}
+                    </div>
+                {% endif %}
+
+            </div>
+        {% endfor %}
+
+        <div class="form-actions">
+
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary">
+                Voltar
+            </a>
+
+            <button type="submit" class="btn btn-primary">
+                Enviar chamado
+            </button>
+
+        </div>
+
+    </form>
+
+</section>
+
+{% endblock %}

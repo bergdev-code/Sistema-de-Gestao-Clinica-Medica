@@ -1,4 +1,3 @@
-
 {% extends 'base.html' %}
 
 {% block title %}
@@ -37,7 +36,6 @@
             <p>Bem-vindo à sua área do paciente.</p>
         </section>
 
-        <!-- CONTAINER DOS PAINÉIS -->
         <div class="dashboard-cards">
 
             <!-- DADOS PESSOAIS -->
@@ -61,19 +59,15 @@
 
                 <div class="info-item">
                     <span>Data de nascimento:</span>
-                    <strong>
-                        {{ paciente.data_nascimento|date:"d/m/Y"|default:"Não informada" }}
-                    </strong>
+                    <strong>{{ paciente.data_nascimento|date:"d/m/Y"|default:"Não informada" }}</strong>
                 </div>
             </section>
 
             <!-- PRÓXIMO ATENDIMENTO -->
             <section class="dashboard-card">
-
                 <h2>Meu próximo atendimento</h2>
 
                 {% if proxima_consulta %}
-
                     <div class="info-item">
                         <span>Tipo:</span>
                         <strong>{{ proxima_consulta.tipo }}</strong>
@@ -81,9 +75,7 @@
 
                     <div class="info-item">
                         <span>Data e hora:</span>
-                        <strong>
-                            {{ proxima_consulta.data_hora|date:"d/m/Y H:i" }}
-                        </strong>
+                        <strong>{{ proxima_consulta.data_hora|date:"d/m/Y H:i" }}</strong>
                     </div>
 
                     <div class="info-item">
@@ -95,80 +87,56 @@
                         <span>Status:</span>
                         <strong>{{ proxima_consulta.status.descricao }}</strong>
                     </div>
-
                 {% else %}
-
                     <p>Você não possui atendimentos futuros confirmados.</p>
-
                 {% endif %}
 
                 <p style="margin-top: 16px;">
-                    <a class="btn btn-primary"
-                       href="{% url 'solicitar_consulta' %}">
+                    <a class="btn btn-primary" href="{% url 'solicitar_consulta' %}">
                         Solicitar consulta ou exame
                     </a>
                 </p>
-
             </section>
 
-<!-- ALERGIAS -->
-<section class="dashboard-card alergias-card">
-
-    <div class="alergias-titulo">
-        <h2>Alergias</h2>
-        <p>Informações importantes para o atendimento</p>
-    </div>
-
-    {% if alergias %}
-        <div class="alergias-lista">
-
-            {% for alergia in alergias %}
-                <div class="alergia-linha">
-
-                    <span class="alergia-indicador">!</span>
-
-                    <strong>{{ alergia.descricao }}</strong>
-
-                    {% if pode_gerir_alergia %}
-                        <form
-                            method="POST"
-                            action="{% url 'excluir_alergia' paciente.cpf alergia.id_alergias %}"
-                            onsubmit="return confirm('Deseja realmente excluir esta alergia?');"
-                        >
-                            {% csrf_token %}
-                            <button
-                                type="submit"
-                                class="btn-remover-alergia"
-                                title="Excluir alergia"
-                            >
-                                Remover
-                            </button>
-                        </form>
-                    {% endif %}
-
+            <!-- ALERGIAS -->
+            <section class="dashboard-card alergias-card">
+                <div class="alergias-titulo">
+                    <h2>Alergias</h2>
+                    <p>Informações importantes para o atendimento</p>
                 </div>
-            {% endfor %}
 
-        </div>
-    {% else %}
-        <p class="alergias-vazio">
-            Nenhuma alergia cadastrada.
-        </p>
-    {% endif %}
+                {% if alergias %}
+                    <div class="alergias-lista">
+                        {% for alergia in alergias %}
+                            <div class="alergia-linha">
+                                <span class="alergia-indicador">!</span>
+                                <strong>{{ alergia.descricao }}</strong>
 
-</section>
-
-
-
+                                {% if pode_gerir_alergia %}
+                                    <form
+                                        method="POST"
+                                        action="{% url 'excluir_alergia' paciente.cpf alergia.id_alergias %}"
+                                        onsubmit="return confirm('Deseja realmente excluir esta alergia?');"
+                                    >
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn-remover-alergia" title="Excluir alergia">
+                                            Remover
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="alergias-vazio">Nenhuma alergia cadastrada.</p>
+                {% endif %}
             </section>
 
             <!-- HISTÓRICO DE CONSULTAS -->
             <section class="dashboard-card">
-
                 <h2>Histórico de consultas e exames</h2>
 
                 {% if agendamentos %}
-
                     <div class="table-scroll">
                         <table>
                             <thead>
@@ -179,10 +147,8 @@
                                     <th>Status</th>
                                 </tr>
                             </thead>
-
                             <tbody>
                                 {% for ag in agendamentos %}
-
                                     <tr>
                                         <td>{{ ag.tipo }}</td>
                                         <td>{{ ag.medico.nome }}</td>
@@ -195,29 +161,21 @@
                                         </td>
                                         <td>{{ ag.status.descricao }}</td>
                                     </tr>
-
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
-
                 {% else %}
-
                     <p>Você ainda não possui consultas ou exames registrados.</p>
-
                 {% endif %}
-
             </section>
 
             <!-- PRONTUÁRIOS -->
             <section class="dashboard-card">
-
                 <h2>Meu histórico médico</h2>
 
                 {% if prontuarios %}
-
                     {% for prontuario in prontuarios %}
-
                         <div class="info-item">
                             <span>Médico:</span>
                             <strong>{{ prontuario.medico.nome }}</strong>
@@ -241,24 +199,17 @@
                         {% if not forloop.last %}
                             <hr>
                         {% endif %}
-
                     {% endfor %}
-
                 {% else %}
-
                     <p>Nenhum prontuário disponível.</p>
-
                 {% endif %}
-
             </section>
 
             <!-- PAGAMENTOS -->
             <section class="dashboard-card">
-
                 <h2>Meus pagamentos</h2>
 
                 {% if pagamentos %}
-
                     <div class="table-scroll">
                         <table>
                             <thead>
@@ -270,29 +221,21 @@
                                     <th>Data</th>
                                 </tr>
                             </thead>
-
                             <tbody>
                                 {% for pagamento in pagamentos %}
-
                                     <tr>
                                         <td>{{ pagamento.descricao }}</td>
                                         <td>R$ {{ pagamento.valor|floatformat:2 }}</td>
                                         <td>{{ pagamento.forma_pagamento }}</td>
                                         <td>{{ pagamento.status_pagamento.descricao }}</td>
-                                        <td>
-                                            {{ pagamento.data_pagamento|date:"d/m/Y" }}
-                                        </td>
+                                        <td>{{ pagamento.data_pagamento|date:"d/m/Y" }}</td>
                                     </tr>
-
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
-
                 {% else %}
-
                     <p>Você ainda não possui pagamentos registrados.</p>
-
                 {% endif %}
 
                 <p style="margin-top: 16px;">
@@ -300,18 +243,39 @@
                         Acessar financeiro
                     </a>
                 </p>
-
             </section>
 
+            
+<!-- SUPORTE DO PACIENTE -->
+<section class="dashboard-card">
+    <h2>Central de suporte</h2>
+
+    <p>
+        Precisa de ajuda? Abra um chamado para entrar em contato
+        com a equipe da clínica ou acompanhe suas solicitações.
+    </p>
+
+    <div class="acoes-linha" style="margin-top: 16px;">
+
+        <a class="btn btn-primary" href="{% url 'abrir_chamado' %}">
+            Abrir chamado
+        </a>
+
+        <a class="btn btn-secondary" href="{% url 'chamados_suporte' %}">
+            Meus chamados
+        </a>
+
+    </div>
+</section>
+
+
         </div>
-        <!-- FIM DOS PAINÉIS -->
 
     {% endif %}
 
 {% else %}
 
     <!-- PAINEL DOS DEMAIS PERFIS -->
-
     <section class="welcome-section">
         <h1>Bem-vindo, {{ request.session.username }}!</h1>
         <p>Você está no painel do Sistema de Gestão Clínica.</p>
@@ -366,9 +330,25 @@
                 </div>
 
                 <p style="margin-top: 16px;">
-                    <a class="btn btn-primary"
-                       href="{% url 'lista' 'consultas' %}">
+                    <a class="btn btn-primary" href="{% url 'lista' 'consultas' %}">
                         Ver consultas
+                    </a>
+                </p>
+            </section>
+        {% endif %}
+
+        <!-- CENTRAL DE SUPORTE DA EQUIPE -->
+        {% if request.session.perfil == "ADMIN GERAL" or request.session.perfil == "Administrador" or request.session.perfil == "Recepcionista" %}
+            <section class="dashboard-card">
+                <h2>Central de suporte</h2>
+                <p>
+                    Consulte os chamados enviados pelos pacientes,
+                    responda às solicitações e acompanhe os status.
+                </p>
+
+                <p style="margin-top: 16px;">
+                    <a class="btn btn-primary" href="{% url 'listar_chamados' %}">
+                        Acessar chamados
                     </a>
                 </p>
             </section>
@@ -400,8 +380,7 @@
                                     <td>{{ c.tipo }}</td>
                                     <td>{{ c.status.descricao }}</td>
                                     <td>
-                                        <a class="btn btn-primary btn-sm"
-                                           href="{% url 'detalhe_paciente' c.paciente.cpf %}">
+                                        <a class="btn btn-primary btn-sm" href="{% url 'detalhe_paciente' c.paciente.cpf %}">
                                             Ver paciente
                                         </a>
                                     </td>
