@@ -2807,11 +2807,43 @@ def dashboard(request):
 # SUPORTE
 # ==================================================
 
+def _usuario_do_root():
+    """O root (administrador geral) não existe na tabela de usuários. Para poder assinar
+    respostas de suporte, usa (ou cria uma única vez) um registro dele, sem senha utilizável."""
+    existente = Usuario.objects.filter(username__iexact="root").first()
+    if existente:
+        return existente
+
+    perfil = next(
+        (p for p in Perfil.objects.all() if chave_perfil(p.nome_perfil) == _n("Administrador")),
+        None,
+    ) or Perfil.objects.order_by("id_perfil").first()
+    if perfil is None:
+        raise Http404("Cadastre o perfil Administrador antes de usar o suporte com o root.")
+
+    salt = secrets.token_hex(16)
+    try:
+        with transaction.atomic():
+            return Usuario.objects.create(
+                username="root", email="root@clinica.local", salt=salt,
+                senha_hash=gerar_hash(secrets.token_urlsafe(32), salt), id_perfil=perfil,
+            )
+    except IntegrityError:
+        # outra requisição criou o registro ao mesmo tempo (ex.: clique duplo)
+        existente = Usuario.objects.filter(username__iexact="root").first()
+        if existente:
+            return existente
+        raise
+
+
 def usuario_logado(request):
-    return get_object_or_404(
-        Usuario,
-        username=request.session["username"]
-    )
+    username = request.session["username"]
+    usuario = Usuario.objects.filter(username=username).first()
+    if usuario is None and chave_perfil(request.session.get("perfil")) == _n(PERFIL_ROOT):
+        usuario = _usuario_do_root()
+    if usuario is None:
+        raise Http404("Usuário não encontrado.")
+    return usuario
 
 
 def equipe_suporte(request):

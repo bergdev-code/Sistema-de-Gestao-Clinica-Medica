@@ -1,12 +1,12 @@
-import MySQLdb
+""" import MySQLdb
 
 def conectar():
     conexao = MySQLdb.connect(
-        host="bancoclinica-bancoclinica.g.aivencloud.com",
+        host="",
         user="",
         passwd="",
         db="",
         port=
     )
 
-    return conexao
+    return conexao """
