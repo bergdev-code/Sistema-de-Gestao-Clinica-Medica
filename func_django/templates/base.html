@@ -182,18 +182,42 @@
 </script>
 
     <div class="app-shell">
-        <nav class="sidebar" id="menuLateral" aria-label="Menu principal">
-            <a href="{% url 'dashboard' %}" {% if ativo == 'dashboard' %}class="active"{% endif %}>Painel</a>
-            {% if 'pacientes' in menu_permitido %}<a href="{% url 'lista' 'pacientes' %}" {% if ativo == 'pacientes' %}class="active"{% endif %}>Pacientes</a>{% endif %}
-            {% if 'medicos' in menu_permitido %}<a href="{% url 'lista' 'medicos' %}" {% if ativo == 'medicos' %}class="active"{% endif %}>Médicos</a>{% endif %}
-            {% if 'especialidades' in menu_permitido %}<a href="{% url 'lista' 'especialidades' %}" {% if ativo == 'especialidades' %}class="active"{% endif %}>Especialidades</a>{% endif %}
-            {% if 'horarios' in menu_permitido %}<a href="{% url 'lista' 'horarios' %}" {% if ativo == 'horarios' %}class="active"{% endif %}>Horários</a>{% endif %}
-            {% if 'vinculos' in menu_permitido %}<a href="{% url 'lista' 'vinculos' %}" {% if ativo == 'vinculos' %}class="active"{% endif %}>Médicos x Especialid.</a>{% endif %}
-            {% if 'usuarios' in menu_permitido %}<a href="{% url 'lista' 'usuarios' %}" {% if ativo == 'usuarios' %}class="active"{% endif %}>Usuários</a>{% endif %}
-            {% if 'consultas' in menu_permitido %}<a href="{% url 'lista' 'consultas' %}" {% if ativo == 'consultas' %}class="active"{% endif %}>Consultas</a>{% endif %}
-            {% if 'prontuarios' in menu_permitido %}<a href="{% url 'lista' 'prontuarios' %}" {% if ativo == 'prontuarios' %}class="active"{% endif %}>Prontuários</a>{% endif %}
-            {% if 'pagamentos' in menu_permitido %}<a href="{% url 'financeiro' %}" {% if ativo == 'pagamentos' %}class="active"{% endif %}>Financeiro</a>{% endif %}
-        </nav>
+        
+
+<nav class="sidebar" id="menuLateral" aria-label="Menu principal">
+
+    {% if request.session.perfil == 'Paciente' %}
+
+    <a href="{% url 'chamados_suporte' %}"
+       {% if request.resolver_match.url_name == 'chamados_suporte' %}class="active"{% endif %}>
+        Suporte
+    </a>
+
+{% else %}
+
+{% if request.session.perfil == 'Paciente' or request.session.perfil == 'Recepção' or request.session.perfil == 'Médico' or request.session.perfil == 'Administrador' or request.session.perfil == 'Root' or request.session.perfil == 'root' %}
+
+    <a href="{% url 'chamados_suporte' %}"
+       {% if request.resolver_match.url_name == 'chamados_suporte' %}class="active"{% endif %}>
+        Suporte
+    </a>
+
+{% endif %}
+
+        <a href="{% url 'dashboard' %}" {% if ativo == 'dashboard' %}class="active"{% endif %}>Painel</a>
+        {% if 'pacientes' in menu_permitido %}<a href="{% url 'lista' 'pacientes' %}" {% if ativo == 'pacientes' %}class="active"{% endif %}>Pacientes</a>{% endif %}
+        {% if 'medicos' in menu_permitido %}<a href="{% url 'lista' 'medicos' %}" {% if ativo == 'medicos' %}class="active"{% endif %}>Médicos</a>{% endif %}
+        {% if 'especialidades' in menu_permitido %}<a href="{% url 'lista' 'especialidades' %}" {% if ativo == 'especialidades' %}class="active"{% endif %}>Especialidades</a>{% endif %}
+        {% if 'horarios' in menu_permitido %}<a href="{% url 'lista' 'horarios' %}" {% if ativo == 'horarios' %}class="active"{% endif %}>Horários</a>{% endif %}
+        {% if 'vinculos' in menu_permitido %}<a href="{% url 'lista' 'vinculos' %}" {% if ativo == 'vinculos' %}class="active"{% endif %}>Médicos x Especialid.</a>{% endif %}
+        {% if 'usuarios' in menu_permitido %}<a href="{% url 'lista' 'usuarios' %}" {% if ativo == 'usuarios' %}class="active"{% endif %}>Usuários</a>{% endif %}
+        {% if 'consultas' in menu_permitido %}<a href="{% url 'lista' 'consultas' %}" {% if ativo == 'consultas' %}class="active"{% endif %}>Consultas</a>{% endif %}
+        {% if 'prontuarios' in menu_permitido %}<a href="{% url 'lista' 'prontuarios' %}" {% if ativo == 'prontuarios' %}class="active"{% endif %}>Prontuários</a>{% endif %}
+        {% if 'pagamentos' in menu_permitido %}<a href="{% url 'financeiro' %}" {% if ativo == 'pagamentos' %}class="active"{% endif %}>Financeiro</a>{% endif %}
+
+    {% endif %}
+
+</nav>
 
         <main class="content">
             {% for message in messages %}

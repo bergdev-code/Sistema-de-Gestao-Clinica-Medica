@@ -1,4 +1,4 @@
-""" import MySQLdb
+import MySQLdb
 
 def conectar():
     conexao = MySQLdb.connect(
@@ -9,4 +9,4 @@ def conectar():
         port=
     )
 
-    return conexao """
+    return conexao

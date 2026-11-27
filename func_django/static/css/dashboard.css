@@ -488,6 +488,8 @@ body {
     gap: 10px;
 }
 
+
+/* BALÕES DE ALERGIAS */
 .alergias-card .alergia-linha {
     display: flex;
     align-items: center;
@@ -496,11 +498,13 @@ body {
     padding: 10px 14px;
     box-sizing: border-box;
 
-    background: #263449 !important;
-    border: 1px solid #35465d !important;
-    border-radius: 10px !important;
-    color: #e2e8f0;
+    /* Tema claro */
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    color: #1e293b;
 }
+
 
 .alergias-card .alergia-indicador {
     display: flex;
@@ -529,7 +533,7 @@ body {
     border: 1px solid #52647b;
     border-radius: 7px;
     background: transparent;
-    color: #cbd5e1;
+    color: #535961;
     font-size: 12px;
     cursor: pointer;
     transition: .2s;
@@ -617,4 +621,48 @@ body {
     overflow-wrap: anywhere;
     line-height: 1.6;
     color: #cbd5e1;
+}
+
+
+/* =====================================
+   ALERGIAS - TEMA CLARO E ESCURO
+===================================== */
+
+/* TEMA CLARO */
+html[data-theme="light"] .alergias-card .alergia-indicador {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+html[data-theme="light"] .alergias-card .btn-remover-alergia {
+    color: #475569;
+    border-color: #cbd5e1;
+}
+
+html[data-theme="light"] .alergias-card .btn-remover-alergia:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+
+/* TEMA ESCURO */
+html[data-theme="dark"] .alergias-card .alergia-linha {
+    background: #263449;
+    border-color: #35465d;
+    color: #e2e8f0;
+}
+
+html[data-theme="dark"] .alergias-card .alergia-indicador {
+    background: #344761;
+    color: #cbd5e1;
+}
+
+html[data-theme="dark"] .alergias-card .btn-remover-alergia {
+    color: #cbd5e1;
+    border-color: #52647b;
+}
+
+html[data-theme="dark"] .alergias-card .btn-remover-alergia:hover {
+    background: #3b485b;
+    color: #fff;
 }

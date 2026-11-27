@@ -2852,7 +2852,6 @@ def equipe_suporte(request):
     return perfil in {
         _n(PERFIL_ROOT),
         _n("Administrador"),
-        _n(PERFIL_RECEPCIONISTA),
     }
 
 
@@ -2899,16 +2898,21 @@ def abrir_chamado(request):
 @login_requerido
 def chamados_suporte(request):
     usuario = usuario_logado(request)
+    perfil = chave_perfil(request.session.get("perfil"))
 
     if equipe_suporte(request):
         chamados = ChamadoSuporte.objects.select_related(
             "usuario"
         ).all()
 
-    elif chave_perfil(request.session.get("perfil")) == _n(PERFIL_PACIENTE):
+    elif perfil in {
+    _n(PERFIL_PACIENTE),
+    _n(PERFIL_RECEPCIONISTA),
+    _n(PERFIL_MEDICO),
+    }:
         chamados = ChamadoSuporte.objects.filter(
             usuario=usuario
-        )
+        ).select_related("usuario")
 
     else:
         raise PermissionDenied
@@ -2934,7 +2938,11 @@ def detalhe_chamado(request, pk):
             pk=pk
         )
 
-    elif chave_perfil(request.session.get("perfil")) == _n(PERFIL_PACIENTE):
+    elif chave_perfil(request.session.get("perfil")) in {
+    _n(PERFIL_PACIENTE),
+    _n(PERFIL_RECEPCIONISTA),
+    _n(PERFIL_MEDICO),
+}:
 
         usuario = usuario_logado(request)
 
@@ -2961,11 +2969,19 @@ def detalhe_chamado(request, pk):
 @require_POST
 def responder_chamado(request, pk):
     usuario = usuario_logado(request)
+    perfil = chave_perfil(request.session.get("perfil"))
 
     if equipe_suporte(request):
-        chamado = get_object_or_404(ChamadoSuporte, pk=pk)
+        chamado = get_object_or_404(
+            ChamadoSuporte,
+            pk=pk
+        )
 
-    elif chave_perfil(request.session.get("perfil")) == _n(PERFIL_PACIENTE):
+    elif perfil in {
+        _n(PERFIL_PACIENTE),
+        _n(PERFIL_RECEPCIONISTA),
+        _n(PERFIL_MEDICO),
+    }:
         chamado = get_object_or_404(
             ChamadoSuporte,
             pk=pk,
@@ -2978,7 +2994,10 @@ def responder_chamado(request, pk):
     mensagem = request.POST.get("mensagem", "").strip()
 
     if not mensagem:
-        messages.error(request, "Digite uma mensagem antes de enviar.")
+        messages.error(
+            request,
+            "Digite uma mensagem antes de enviar."
+        )
         return redirect("detalhe_chamado", pk=pk)
 
     RespostaSuporte.objects.create(
@@ -2992,7 +3011,10 @@ def responder_chamado(request, pk):
 
     chamado.save()
 
-    messages.success(request, "Resposta enviada com sucesso.")
+    messages.success(
+        request,
+        "Resposta enviada com sucesso."
+    )
 
     return redirect("detalhe_chamado", pk=pk)
 
@@ -3128,22 +3150,20 @@ class ChamadoSuporteForm(forms.ModelForm):
 
 @login_requerido
 def abrir_chamado(request):
+    perfil = chave_perfil(request.session.get("perfil"))
 
-    username = request.session.get("username", "")
+    perfis_autorizados = {
+        _n(PERFIL_PACIENTE),
+        _n(PERFIL_RECEPCIONISTA),
+        _n(PERFIL_MEDICO),
+    }
 
-    usuario = Usuario.objects.filter(
-        username__iexact=username
-    ).first()
+    if perfil not in perfis_autorizados:
+        raise PermissionDenied
 
-    if not usuario:
-        messages.error(
-            request,
-            "Não foi possível localizar sua conta."
-        )
-        return redirect("dashboard")
+    usuario = usuario_logado(request)
 
     if request.method == "POST":
-
         form = ChamadoSuporteForm(request.POST)
 
         if form.is_valid():

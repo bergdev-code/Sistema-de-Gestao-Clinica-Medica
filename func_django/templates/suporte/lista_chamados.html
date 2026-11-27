@@ -15,9 +15,11 @@
     <div class="suporte-lista-cabecalho">
         <h2>Minhas solicitações</h2>
 
-        <a href="{% url 'abrir_chamado' %}" class="btn btn-primary">
-            Abrir chamado
+       {% if not equipe_suporte %}
+            <a href="{% url 'abrir_chamado' %}" class="btn btn-primary">
+        Abrir chamado
         </a>
+        {% endif %}
     </div>
 
     {% if chamados %}
@@ -54,13 +56,17 @@
                             <td>{{ chamado.status }}</td>
 
                             <td>
-                                <a
-                                    href="{% url 'detalhe_chamado' chamado.pk %}"
-                                    class="btn btn-primary btn-sm"
-                                >
-                                    Ver conversa
-                                </a>
-                            </td>
+    {% if equipe_suporte %}
+        <a
+            href="{% url 'detalhe_chamado' chamado.pk %}"
+            class="btn btn-primary btn-sm"
+        >
+            Ver conversa
+        </a>
+    {% else %}
+        —
+    {% endif %}
+</td>
                         </tr>
                     {% endfor %}
                 </tbody>
