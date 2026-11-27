@@ -304,3 +304,33 @@
     color: #222;
     background: #fff;
 }
+
+/* CARDS DOS ATALHOS */
+.atalhos-cards {
+    margin-top: 24px;
+}
+
+.atalho-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 130px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.atalho-card:hover {
+    transform: translateY(-3px);
+    border-color: #3b82f6;
+}
+
+.atalho-card h2 {
+    margin-bottom: 20px;
+}
+
+.atalho-card span {
+    color: #60a5fa;
+    font-size: 13px;
+    font-weight: 600;
+}

@@ -2665,6 +2665,7 @@ def atalhos_do_perfil(perfil):
 
 
 @login_requerido
+
 def dashboard(request):
     perfil = request.session.get("perfil")
     perfil_chave = chave_perfil(perfil)
@@ -2680,17 +2681,20 @@ def dashboard(request):
         "prontuarios": [],
         "alergias": [],
         "pagamentos": [],
-        # None = "não se aplica a este perfil" (o template só mostra o que não for None)
         "consultas_hoje": None,
+        "consultas_hoje_lista": [],
         "proximas_consultas": [],
         "solicitacoes_pendentes": None,
+        "solicitacoes_lista": [],
         "atalhos": atalhos_do_perfil(perfil),
         "total_pacientes": None,
         "total_medicos": None,
         "total_consultas": None,
         "mostrar_suporte": True,
     }
+
     agora = timezone.now() if settings.USE_TZ else dt.datetime.now()
+    hoje = hoje_local()
 
     # --------------------------------------------------
     # ÁREA DO PACIENTE
@@ -2716,6 +2720,7 @@ def dashboard(request):
             .select_related("medico", "status")
             .order_by("-data_hora")
         )
+
         for a in agendamentos:
             a.horario_a_definir = eh_status(a, NOMES_SOLICITADA)
 
@@ -2741,7 +2746,10 @@ def dashboard(request):
 
         proxima_consulta = next(
             (
-                a for a in sorted(agendamentos, key=lambda x: x.data_hora)
+                a for a in sorted(
+                    agendamentos,
+                    key=lambda x: x.data_hora
+                )
                 if a.data_hora >= agora
                 and not eh_status(a, NOMES_CANCELADA)
                 and not eh_status(a, NOMES_SOLICITADA)
@@ -2765,47 +2773,118 @@ def dashboard(request):
     # --------------------------------------------------
     # ÁREA DO MÉDICO
     # --------------------------------------------------
-    if perfil_chave == _n(PERFIL_MEDICO):
+    elif perfil_chave == _n(PERFIL_MEDICO):
 
-        # mesma regra da listagem: só o que a recepção já aceitou, sem cancelados
         consultas = (
             consultas_visiveis(request)
             .exclude(filtro_status(NOMES_CANCELADA))
             .select_related("paciente", "status")
         )
-        hoje = hoje_local()
+
+        consultas_hoje = consultas.filter(
+            data_hora__date=hoje
+        )
+
+        proximas_consultas = (
+            consultas
+            .filter(data_hora__gte=agora)
+            .order_by("data_hora")
+        )
 
         contexto.update({
             "consultas": consultas,
-            "consultas_hoje": consultas.filter(data_hora__date=hoje).count(),
+
+            "consultas_hoje": consultas_hoje.count(),
+
+            "consultas_hoje_lista": list(
+                consultas_hoje
+                .order_by("data_hora")[:8]
+            ),
+
             "total_consultas": consultas.count(),
+
             "proximas_consultas": list(
-                consultas.filter(data_hora__gte=agora).order_by("data_hora")[:8]
+                proximas_consultas[:8]
             ),
         })
 
     # --------------------------------------------------
-    # ADMINISTRADOR E RECEPCIONISTA
+    # ÁREA DA RECEPÇÃO
+    # --------------------------------------------------
+    elif perfil_chave == _n(PERFIL_RECEPCIONISTA):
+
+        consultas_recepcao = (
+            Agendamento.objects
+            .exclude(filtro_status(NOMES_CANCELADA))
+            .select_related("paciente", "medico", "status")
+        )
+
+        solicitacoes = (
+            Agendamento.objects
+            .filter(filtro_status(NOMES_SOLICITADA))
+            .select_related("paciente", "medico", "status")
+            .order_by("data_hora")
+        )
+
+        consultas_hoje = consultas_recepcao.filter(
+            data_hora__date=hoje
+        )
+
+        contexto.update({
+            "total_pacientes": func_django.objects.count(),
+
+            "total_medicos": Medico.objects.filter(
+                ativo=True
+            ).count(),
+
+            "total_consultas": Agendamento.objects.count(),
+
+            "solicitacoes_pendentes": solicitacoes.count(),
+
+            "solicitacoes_lista": list(solicitacoes[:8]),
+
+            "consultas_hoje": consultas_hoje.count(),
+
+            "consultas_hoje_lista": list(
+                consultas_hoje
+                .order_by("data_hora")[:8]
+            ),
+
+            "proximas_consultas": list(
+                consultas_recepcao
+                .filter(data_hora__gte=agora)
+                .order_by("data_hora")[:8]
+            ),
+        })
+
+    # --------------------------------------------------
+    # ADMINISTRADOR E ROOT
     # --------------------------------------------------
     else:
 
         contexto.update({
             "total_pacientes": func_django.objects.count(),
-            "total_medicos": Medico.objects.filter(ativo=True).count(),
+
+            "total_medicos": Medico.objects.filter(
+                ativo=True
+            ).count(),
+
             "total_consultas": Agendamento.objects.count(),
+
             "solicitacoes_pendentes": (
                 Agendamento.objects
                 .filter(filtro_status(NOMES_SOLICITADA))
                 .count()
-                if "aceitar" in acoes_do_perfil(perfil, "consultas") else None
+                if "aceitar" in acoes_do_perfil(
+                    perfil,
+                    "consultas"
+                )
+                else None
             ),
         })
 
     return render(request, "dashboard.html", contexto)
 
-# ==================================================
-# SUPORTE
-# ==================================================
 
 def _usuario_do_root():
     """O root (administrador geral) não existe na tabela de usuários. Para poder assinar

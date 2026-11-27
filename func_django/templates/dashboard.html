@@ -1,3 +1,4 @@
+
 {% extends 'base.html' %}
 
 {% block title %}
@@ -20,6 +21,7 @@
                 Não encontramos um paciente associado à sua conta.
                 Entre em contato com a recepção da clínica.
             </p>
+
             {% if mostrar_completar_cadastro %}
                 <p style="margin-top: 16px;">
                     <a class="btn btn-primary" href="{% url 'completar_cadastro_google' %}">
@@ -245,29 +247,25 @@
                 </p>
             </section>
 
-            
-<!-- SUPORTE DO PACIENTE -->
-<section class="dashboard-card">
-    <h2>Central de suporte</h2>
+            <!-- SUPORTE DO PACIENTE -->
+            <section class="dashboard-card">
+                <h2>Central de suporte</h2>
 
-    <p>
-        Precisa de ajuda? Abra um chamado para entrar em contato
-        com a equipe da clínica ou acompanhe suas solicitações.
-    </p>
+                <p>
+                    Precisa de ajuda? Abra um chamado para entrar em contato
+                    com a equipe da clínica ou acompanhe suas solicitações.
+                </p>
 
-    <div class="acoes-linha" style="margin-top: 16px;">
+                <div class="acoes-linha" style="margin-top: 16px;">
+                    <a class="btn btn-primary" href="{% url 'abrir_chamado' %}">
+                        Abrir chamado
+                    </a>
 
-        <a class="btn btn-primary" href="{% url 'abrir_chamado' %}">
-            Abrir chamado
-        </a>
-
-        <a class="btn btn-secondary" href="{% url 'chamados_suporte' %}">
-            Meus chamados
-        </a>
-
-    </div>
-</section>
-
+                    <a class="btn btn-secondary" href="{% url 'chamados_suporte' %}">
+                        Meus chamados
+                    </a>
+                </div>
+            </section>
 
         </div>
 
@@ -281,32 +279,15 @@
         <p>Você está no painel do Sistema de Gestão Clínica.</p>
     </section>
 
-    <div class="dashboard-cards">
+    <!-- =================================
+         PAINEL DO MÉDICO
+    ================================== -->
+    {% if request.session.perfil == "Médico" %}
 
-        {% if total_pacientes is not None %}
+        <div class="dashboard-cards">
+
             <section class="dashboard-card">
-                <h2>Visão geral</h2>
-
-                <div class="info-item">
-                    <span>Pacientes cadastrados:</span>
-                    <strong>{{ total_pacientes }}</strong>
-                </div>
-
-                <div class="info-item">
-                    <span>Médicos ativos:</span>
-                    <strong>{{ total_medicos }}</strong>
-                </div>
-
-                <div class="info-item">
-                    <span>Consultas e exames registrados:</span>
-                    <strong>{{ total_consultas }}</strong>
-                </div>
-            </section>
-        {% endif %}
-
-        {% if consultas_hoje is not None %}
-            <section class="dashboard-card">
-                <h2>Seu dia</h2>
+                <h2>Meu dia</h2>
 
                 <div class="info-item">
                     <span>Consultas agendadas para hoje:</span>
@@ -318,47 +299,59 @@
                     <strong>{{ total_consultas }}</strong>
                 </div>
             </section>
-        {% endif %}
 
-        {% if solicitacoes_pendentes is not None %}
             <section class="dashboard-card">
-                <h2>Solicitações de consulta</h2>
+                <h2>Minha agenda</h2>
 
                 <div class="info-item">
-                    <span>Aguardando resposta:</span>
-                    <strong>{{ solicitacoes_pendentes }}</strong>
+                    <span>Próximos atendimentos:</span>
+                    <strong>{{ proximas_consultas|length }}</strong>
                 </div>
 
                 <p style="margin-top: 16px;">
                     <a class="btn btn-primary" href="{% url 'lista' 'consultas' %}">
-                        Ver consultas
+                        Acessar agenda
                     </a>
                 </p>
             </section>
-        {% endif %}
 
-        <!-- CENTRAL DE SUPORTE DA EQUIPE -->
-        {% if request.session.perfil == "ADMIN GERAL" or request.session.perfil == "Administrador" or request.session.perfil == "Recepcionista" %}
-            <section class="dashboard-card">
-                <h2>Central de suporte</h2>
-                <p>
-                    Consulte os chamados enviados pelos pacientes,
-                    responda às solicitações e acompanhe os status.
-                </p>
+        </div>
 
-                <p style="margin-top: 16px;">
-                    <a class="btn btn-primary" href="{% url 'listar_chamados' %}">
-                        Acessar chamados
-                    </a>
-                </p>
-            </section>
-        {% endif %}
+        <!-- ATENDIMENTOS DE HOJE -->
+        <section class="dashboard-card" style="margin-top: 24px;">
+            <h2>Atendimentos de hoje</h2>
 
-    </div>
+            {% if consultas_hoje_lista %}
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Horário</th>
+                                <th>Paciente</th>
+                                <th>Tipo</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in consultas_hoje_lista %}
+                                <tr>
+                                    <td>{{ c.data_hora|date:"H:i" }}</td>
+                                    <td>{{ c.paciente.nome|default:c.paciente.cpf }}</td>
+                                    <td>{{ c.tipo }}</td>
+                                    <td>{{ c.status.descricao }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>Você não possui atendimentos agendados para hoje.</p>
+            {% endif %}
+        </section>
 
-    {% if consultas_hoje is not None %}
-        <section class="dashboard-card" style="margin-top: 20px;">
-            <h2>Próximas consultas</h2>
+        <!-- PRÓXIMOS PACIENTES -->
+        <section class="dashboard-card" style="margin-top: 24px;">
+            <h2>Próximos pacientes</h2>
 
             {% if proximas_consultas %}
                 <div class="table-scroll">
@@ -369,7 +362,7 @@
                                 <th>Paciente</th>
                                 <th>Tipo</th>
                                 <th>Status</th>
-                                <th></th>
+                                <th>Ações</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -380,7 +373,10 @@
                                     <td>{{ c.tipo }}</td>
                                     <td>{{ c.status.descricao }}</td>
                                     <td>
-                                        <a class="btn btn-primary btn-sm" href="{% url 'detalhe_paciente' c.paciente.cpf %}">
+                                        <a
+                                            class="btn btn-primary btn-sm"
+                                            href="{% url 'detalhe_paciente' c.paciente.cpf %}"
+                                        >
                                             Ver paciente
                                         </a>
                                     </td>
@@ -390,24 +386,262 @@
                     </table>
                 </div>
             {% else %}
-                <p>Você não possui consultas futuras agendadas.</p>
+                <p>Você não possui próximos atendimentos agendados.</p>
             {% endif %}
         </section>
+
+    <!-- =================================
+         PAINEL DA RECEPÇÃO
+    ================================== -->
+    {% elif request.session.perfil == "Recepção" or request.session.perfil == "Recepcionista" %}
+
+        <div class="dashboard-cards">
+
+            <section class="dashboard-card">
+                <h2>Pacientes cadastrados</h2>
+
+                <div class="info-item">
+                    <span>Total de pacientes:</span>
+                    <strong>{{ total_pacientes }}</strong>
+                </div>
+            </section>
+
+            <section class="dashboard-card">
+                <h2>Equipe médica</h2>
+
+                <div class="info-item">
+                    <span>Médicos ativos:</span>
+                    <strong>{{ total_medicos }}</strong>
+                </div>
+            </section>
+
+            <section class="dashboard-card">
+                <h2>Consultas e exames</h2>
+
+                <div class="info-item">
+                    <span>Total registrado:</span>
+                    <strong>{{ total_consultas }}</strong>
+                </div>
+
+                <div class="info-item">
+                    <span>Agendamentos de hoje:</span>
+                    <strong>{{ consultas_hoje }}</strong>
+                </div>
+            </section>
+
+            <section class="dashboard-card">
+                <h2>Solicitações pendentes</h2>
+
+                <div class="info-item">
+                    <span>Aguardando resposta:</span>
+                    <strong>{{ solicitacoes_pendentes }}</strong>
+                </div>
+
+                <p style="margin-top: 16px;">
+                    <a class="btn btn-primary" href="{% url 'lista' 'consultas' %}">
+                        Gerenciar solicitações
+                    </a>
+                </p>
+            </section>
+
+        </div>
+
+        <!-- SOLICITAÇÕES PENDENTES -->
+        <section class="dashboard-card" style="margin-top: 24px;">
+            <h2>Solicitações aguardando atendimento</h2>
+
+            {% if solicitacoes_lista %}
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Paciente</th>
+                                <th>Médico</th>
+                                <th>Tipo</th>
+                                <th>Data solicitada</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in solicitacoes_lista %}
+                                <tr>
+                                    <td>{{ c.paciente.nome|default:c.paciente.cpf }}</td>
+                                    <td>{{ c.medico.nome }}</td>
+                                    <td>{{ c.tipo }}</td>
+                                    <td>{{ c.data_hora|date:"d/m/Y H:i" }}</td>
+                                    <td>{{ c.status.descricao }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>Não existem solicitações aguardando atendimento.</p>
+            {% endif %}
+        </section>
+
+        <!-- AGENDAMENTOS DE HOJE -->
+        <section class="dashboard-card" style="margin-top: 24px;">
+            <h2>Agendamentos de hoje</h2>
+
+            {% if consultas_hoje_lista %}
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Horário</th>
+                                <th>Paciente</th>
+                                <th>Médico</th>
+                                <th>Tipo</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in consultas_hoje_lista %}
+                                <tr>
+                                    <td>{{ c.data_hora|date:"H:i" }}</td>
+                                    <td>{{ c.paciente.nome|default:c.paciente.cpf }}</td>
+                                    <td>{{ c.medico.nome }}</td>
+                                    <td>{{ c.tipo }}</td>
+                                    <td>{{ c.status.descricao }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>Não existem consultas ou exames agendados para hoje.</p>
+            {% endif %}
+        </section>
+
+        <!-- PRÓXIMAS CONSULTAS -->
+        <section class="dashboard-card" style="margin-top: 24px;">
+            <h2>Próximas consultas</h2>
+
+            {% if proximas_consultas %}
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Data e hora</th>
+                                <th>Paciente</th>
+                                <th>Médico</th>
+                                <th>Tipo</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in proximas_consultas %}
+                                <tr>
+                                    <td>{{ c.data_hora|date:"d/m/Y H:i" }}</td>
+                                    <td>{{ c.paciente.nome|default:c.paciente.cpf }}</td>
+                                    <td>{{ c.medico.nome }}</td>
+                                    <td>{{ c.tipo }}</td>
+                                    <td>{{ c.status.descricao }}</td>
+                                    <td>
+                                        <a
+                                            class="btn btn-primary btn-sm"
+                                            href="{% url 'detalhe_paciente' c.paciente.cpf %}"
+                                        >
+                                            Ver paciente
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>Não existem consultas futuras agendadas.</p>
+            {% endif %}
+        </section>
+
+    <!-- =================================
+         PAINEL DO ADMINISTRADOR E ROOT
+    ================================== -->
+    {% else %}
+
+        <div class="dashboard-cards">
+
+            {% if total_pacientes is not None %}
+                <section class="dashboard-card">
+                    <h2>Visão geral</h2>
+
+                    <div class="info-item">
+                        <span>Pacientes cadastrados:</span>
+                        <strong>{{ total_pacientes }}</strong>
+                    </div>
+
+                    <div class="info-item">
+                        <span>Médicos ativos:</span>
+                        <strong>{{ total_medicos }}</strong>
+                    </div>
+
+                    <div class="info-item">
+                        <span>Consultas e exames registrados:</span>
+                        <strong>{{ total_consultas }}</strong>
+                    </div>
+                </section>
+            {% endif %}
+
+            {% if solicitacoes_pendentes is not None %}
+                <section class="dashboard-card">
+                    <h2>Solicitações de consulta</h2>
+
+                    <div class="info-item">
+                        <span>Aguardando resposta:</span>
+                        <strong>{{ solicitacoes_pendentes }}</strong>
+                    </div>
+
+                    <p style="margin-top: 16px;">
+                        <a class="btn btn-primary" href="{% url 'lista' 'consultas' %}">
+                            Ver consultas
+                        </a>
+                    </p>
+                </section>
+            {% endif %}
+
+            {% if request.session.perfil == "ADMIN GERAL" or request.session.perfil == "Root" or request.session.perfil == "Administrador" %}
+                <section class="dashboard-card">
+                    <h2>Central de suporte</h2>
+
+                    <p>
+                        Consulte os chamados enviados pelos usuários,
+                        responda às solicitações e acompanhe os status.
+                    </p>
+
+                    <p style="margin-top: 16px;">
+                        <a class="btn btn-primary" href="{% url 'listar_chamados' %}">
+                            Acessar chamados
+                        </a>
+                    </p>
+                </section>
+            {% endif %}
+
+        </div>
+
     {% endif %}
 
-    {% if atalhos %}
-        <section class="atalhos" aria-label="Acesso rápido">
-            {% for a in atalhos %}
-                <a class="atalho" href="{{ a.url }}">
-                    {{ a.titulo }}
-                </a>
-            {% endfor %}
-        </section>
-    {% else %}
-        <div class="alert alert-warning" style="margin-top: 20px;">
-            Nenhuma tela está liberada para o perfil "{{ request.session.perfil }}".
-            Peça ao administrador para conferir o nome do perfil.
-        </div>
+    <!-- ATALHOS DOS DEMAIS PERFIS -->
+{% if request.session.perfil != "Médico" and request.session.perfil != "Recepção" and request.session.perfil != "Recepcionista" and request.session.perfil != "Administrador" and request.session.perfil != "Root" and request.session.perfil != "ADMIN GERAL" %}
+
+        {% if atalhos %}
+            <div class="dashboard-cards atalhos-cards">
+                {% for a in atalhos %}
+                    <a class="dashboard-card atalho-card" href="{{ a.url }}">
+                        <h2>{{ a.titulo }}</h2>
+                        <span>Acessar página →</span>
+                    </a>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-warning" style="margin-top: 20px;">
+                Nenhuma tela está liberada para o perfil "{{ request.session.perfil }}".
+                Peça ao administrador para conferir o nome do perfil.
+            </div>
+        {% endif %}
+
     {% endif %}
 
 {% endif %}
